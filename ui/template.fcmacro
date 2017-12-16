@@ -20,8 +20,7 @@ class GuiClassNameClass(QtGui.QDialog):
 		Dialog = self # Added 
 		self.result = -1 
 		self.setupUi(self)
-		# Fill table with dimensions.
-
+		self.show()
 # The next lines are from QtDesigner .ui-file processed by pyside-uic
 # pyside-uic --indent=0 your-qtdesigner-file.ui -o yourpythonfile.py
 
