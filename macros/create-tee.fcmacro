@@ -1,0 +1,85 @@
+# -*- coding: utf-8 -*-
+# Author: Ruslan Krenzler.
+# Date: 16 December 2017
+# Create a tee-fitting.
+# Version 0.1
+
+import math
+
+from PySide import QtCore, QtGui
+import FreeCAD
+import Spreadsheet
+import Sketcher
+import Part
+
+
+document = App.activeDocument()
+tu = FreeCAD.Units.parseQuantity
+
+# The value RELATIVE_EPSILON is used to slightly change the size of a subtracted part
+# to prevent problems with boolean operations.
+# This value does not change the appearance of part and can be large.
+# If the original value is L then we often use the value L*(1+RELATIVE_EPSILON) instead.
+# The relative deviation is then (L*(1+RELATIVE_EPSILON)-L)/L = RELATIVE_EPSILON.
+# That is why the constant has "relative" in its name.
+RELATIVE_EPSILON = 0.1
+
+G = tu("3/8 in")
+G1 = tu("3/8 in")
+H = tu("1+1/8 in") # It is L/2 for symetrical Tee. Why extra dimension?
+H1 = tu("1+1/8 in")
+L = tu("2+1/4 in")
+M = tu("31/32 in")
+innerD =  tu("0.473 in")
+socketD = tu("0.675 in")
+
+vertical_outer_cylinder = document.addObject("Part::Cylinder","VerticalOuterCynlider")
+vertical_outer_cylinder.Radius = M/2
+vertical_outer_cylinder.Height = H1
+vertical_inner_cylinder = document.addObject("Part::Cylinder","VerticalInnerCynlider")
+vertical_inner_cylinder.Radius = innerD/2
+vertical_inner_cylinder.Height = H1 * (1+RELATIVE_EPSILON)
+
+horizontal_outer_cylinder = document.addObject("Part::Cylinder","HorizontalOuterCynlider")
+horizontal_outer_cylinder.Radius = M/2
+horizontal_outer_cylinder.Height = L
+# I do not understand the logic here. Why when I use GUI the vector is App.Vector(0,0,-L/2)
+# and with the macros it is App.Vector(-L/2,0,0). Differne systems?
+horizontal_outer_cylinder.Placement = App.Placement(App.Vector(-L/2,0,0), App.Rotation(App.Vector(0,1,0),90), App.Vector(0,0,0))
+horizontal_inner_cylinder = document.addObject("Part::Cylinder","HorizontalInnerCynlider")
+horizontal_inner_cylinder.Radius = innerD/2
+horizontal_inner_cylinder.Height = L* (1+2*RELATIVE_EPSILON)
+horizontal_inner_cylinder.Placement = App.Placement(App.Vector(-horizontal_inner_cylinder.Height/2,0,0), App.Rotation(App.Vector(0,1,0),90), App.Vector(0,0,0))
+
+# Fuse outer parts to a tee, fuse inner parts to a tee, substract both parts
+outer_fusion = App.activeDocument().addObject("Part::MultiFuse","OuterTeeFusion")
+outer_fusion.Shapes = [vertical_outer_cylinder,horizontal_outer_cylinder]
+inner_fusion = App.activeDocument().addObject("Part::MultiFuse","InnerTeeFusion")
+inner_fusion.Shapes = [vertical_inner_cylinder,horizontal_inner_cylinder]
+basic_tee = App.activeDocument().addObject("Part::Cut","Cut")
+basic_tee.Base = outer_fusion
+basic_tee.Tool = inner_fusion
+
+# Remove place for suckets
+socket_left = document.addObject("Part::Cylinder","SocketLeft")
+socket_left.Radius = socketD /2
+socket_left.Height = (L/2 - G)*(1+RELATIVE_EPSILON)
+socket_left.Placement = App.Placement(App.Vector(-socket_left.Height - G,0,0), App.Rotation(App.Vector(0,1,0),90), App.Vector(0,0,0))
+
+socket_right = document.addObject("Part::Cylinder","SocketRight")
+socket_right.Radius = socketD /2
+socket_right.Height = (L/2 - G)*(1+RELATIVE_EPSILON)
+socket_right.Placement = App.Placement(App.Vector(G,0,0), App.Rotation(App.Vector(0,1,0),90), App.Vector(0,0,0))
+
+socket_top = document.addObject("Part::Cylinder","SocketTop")
+socket_top.Radius = socketD /2
+socket_top.Height = (H1 - G1)*(1+RELATIVE_EPSILON)
+socket_top.Placement = App.Placement(App.Vector(0,0,G1), App.Rotation(App.Vector(0,1,0),0), App.Vector(0,0,0))
+
+sockets_fusion = App.activeDocument().addObject("Part::MultiFuse","Sockets")
+sockets_fusion.Shapes = [socket_left,socket_right,socket_top]
+# Remove sockets from the basic tee.
+tee = App.activeDocument().addObject("Part::Cut","Tee")
+tee.Base = basic_tee
+tee.Tool = sockets_fusion
+document.recompute()
