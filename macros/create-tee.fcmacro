@@ -16,11 +16,6 @@ import Part
 document = App.activeDocument()
 tu = FreeCAD.Units.parseQuantity
 
-# This factor is used to slightly change the size of a subtracted part
-# to prevent problems with boolean operations.
-# This value does not change the appearance of part and can be large.
-RELATIVE_EPSILON = 0.1
-
 # The value RELATIVE_EPSILON is used to slightly change the size of a subtracted part
 # to prevent problems with boolean operations.
 # This value does not change the appearance of part and can be large.
@@ -30,7 +25,7 @@ RELATIVE_EPSILON = 0.1
 RELATIVE_EPSILON = 0.1
 
 NPS_NAME_COLUMN_INDEX = 0
-NPS_SCHEDULE_COLUNN_INDEX = 1
+NPS_SCHEDULE_COLUMN_INDEX = 1
 NPS_OUTER_DIAMETER_COLUMN_INDEX = 2
 NPS_INNER_DIAMETER_COLUMN_INDEX = 3
 
@@ -74,25 +69,27 @@ NPS_PVC_TABLE = [
 
 TEE_NAME_COLUMN_INDEX = 0
 TEE_PIPE_SIZE_NAME_COLUMN_INDEX = 1
-TEE_SCHEDULE_COLUNN_INDEX = 2
+TEE_SCHEDULE_COLUMN_INDEX = 2
 TEE_G_COLUMN_INDEX = 3
 TEE_G1_COLUMN_INDEX = 4
-TEE_H_COLMN_INDEX = 5
-TEE_H1_COLMN_INDEX = 6
-TEE_M_COLMN_INDEX = 7
-TEE_WEIGHT_COLMN_INDEX = 8 # LBS
+TEE_H_COLUMN_INDEX = 5
+TEE_H1_COLUMN_INDEX = 6
+TEE_L_COLUMN_INDEX = 7
+TEE_M_COLUMN_INDEX = 8
+TEE_WEIGHT_COLUMN_INDEX = 9 # LBS, Not used now
 
-TEE_TABLE = [['401-003', '3/8"', 40, 3/8.0, 3/8.0, 3/8.0, 1+1/8.0, 1+1/8.0, 2+1/4.0, 31/32.0, .04],
-['401-005', '1/2"', 40, 1/2.0, 1/2.0, 1/2.0, 1+1/4.0, 1+1/4.0, 2+1/2.0, 1+3/32.0, .06],
-['401-007', '9/16"', 40, 3/4.0, 9/16.0, 9/16.0, 1+9/16.0, 1+9/16.0, 3+1/8.0, 1+5/16.0, .10],
-['401-010', '11/16"', 40, 1, 11/16.0, 11/16.0, 1+3/4.0, 1+3/4.0, 3+1/2.0, 1+5/8.0, .16],
-['401-012', '7/8"', 40, 1+1/4.0, 7/8.0, 7/8.0, 2+1/8.0, 2+1/8.0, 4+1/4.0, 2, .25],
-['401-015', '1-1/16"', 40, 1+1/2.0, 1+1/16.0, 1+1/16.0, 2+3/8.0, 2+3/8.0, 4+3/4.0, 2+1/4.0, .33],
-['401-020', '1-3/8"', 40, 2, 1+3/8.0, 1+3/8.0, 2+3/4.0, 2+3/4.0, 5+1/2.0, 2+3/4.0, .51],
-['401-025', '1-21/32"', 40, 2+1/2.0, 1+21/32.0, 1+21/32.0, 3+13/32.0, 3+13/32.0, 6+13/16.0, 3+11/32.0, 1.03]]
+TEE_TABLE = [['401-003', '3/8"', 40, 3/8.0, 3/8.0, 1+1/8.0, 1+1/8.0, 2+1/4.0, 31/32.0, .04],
+['401-005', '1/2"', 40, 1/2.0, 1/2.0, 1+1/4.0, 1+1/4.0, 2+1/2.0, 1+3/32.0, .06],
+['401-007', '3/4"', 40, 9/16.0, 9/16.0, 1+9/16.0, 1+9/16.0, 3+1/8.0, 1+5/16.0, .10],
+['401-010', '1"', 40, 11/16.0, 11/16.0, 1+3/4.0, 1+3/4.0, 3+1/2.0, 1+5/8.0, .16],
+['401-012', '1-1/4"', 40, 7/8.0, 7/8.0, 2+1/8.0, 2+1/8.0, 4+1/4.0, 2, .25],
+['401-015', '1-1/2"', 40, 1+1/16.0, 1+1/16.0, 2+3/8.0, 2+3/8.0, 4+3/4.0, 2+1/4.0, .33],
+['401-020', '2"', 40, 1+3/8.0, 1+3/8.0, 2+3/4.0, 2+3/4.0, 5+1/2.0, 2+3/4.0, .51],
+['401-025', '2-1/2"', 40, 1+21/32.0, 1+21/32.0, 3+13/32.0, 3+13/32.0, 6+13/16.0, 3+11/32.0, 1.03]]
 
 class Tee:
-	def __init__(self):
+	def __init__(self, document):
+		self.document = document
 		# fill data with test values
 		self.G = tu("3/8 in")
 		self.G1 = tu("3/8 in")
@@ -103,58 +100,105 @@ class Tee:
 		self.innerD =  tu("0.473 in")
 		self.socketD = tu("0.675 in")
 	
-	def create(self, document):
-		vertical_outer_cylinder = document.addObject("Part::Cylinder","VerticalOuterCynlider")
+	def create(self):
+		vertical_outer_cylinder = self.document.addObject("Part::Cylinder","VerticalOuterCynlider")
 		vertical_outer_cylinder.Radius = self.M/2
 		vertical_outer_cylinder.Height = self.H1
-		vertical_inner_cylinder = document.addObject("Part::Cylinder","VerticalInnerCynlider")
+		vertical_inner_cylinder = self.document.addObject("Part::Cylinder","VerticalInnerCynlider")
 		vertical_inner_cylinder.Radius = self.innerD/2
 		vertical_inner_cylinder.Height =self.H1 * (1+RELATIVE_EPSILON)
 		
-		horizontal_outer_cylinder = document.addObject("Part::Cylinder","HorizontalOuterCynlider")
+		horizontal_outer_cylinder = self.document.addObject("Part::Cylinder","HorizontalOuterCynlider")
 		horizontal_outer_cylinder.Radius = self.M/2
 		horizontal_outer_cylinder.Height = self.L
 		# I do not understand the logic here. Why when I use GUI the vector is App.Vector(0,0,-L/2)
 		# and with the macros it is App.Vector(-L/2,0,0). Differne systems?
 		horizontal_outer_cylinder.Placement = App.Placement(App.Vector(-horizontal_outer_cylinder.Height/2,0,0), App.Rotation(App.Vector(0,1,0),90), App.Vector(0,0,0))
-		horizontal_inner_cylinder = document.addObject("Part::Cylinder","HorizontalInnerCynlider")
+		horizontal_inner_cylinder = self.document.addObject("Part::Cylinder","HorizontalInnerCynlider")
 		horizontal_inner_cylinder.Radius = self.innerD/2
 		horizontal_inner_cylinder.Height = self.L*(1+2*RELATIVE_EPSILON)
 		horizontal_inner_cylinder.Placement = App.Placement(App.Vector(-horizontal_inner_cylinder.Height/2,0,0), App.Rotation(App.Vector(0,1,0),90), App.Vector(0,0,0))
 		
 		# Fuse outer parts to a tee, fuse inner parts to a tee, substract both parts
-		outer_fusion = App.activeDocument().addObject("Part::MultiFuse","OuterTeeFusion")
+		outer_fusion = self.document.addObject("Part::MultiFuse","OuterTeeFusion")
 		outer_fusion.Shapes = [vertical_outer_cylinder,horizontal_outer_cylinder]
-		inner_fusion = App.activeDocument().addObject("Part::MultiFuse","InnerTeeFusion")
+		inner_fusion = self.document.addObject("Part::MultiFuse","InnerTeeFusion")
 		inner_fusion.Shapes = [vertical_inner_cylinder,horizontal_inner_cylinder]
-		basic_tee = App.activeDocument().addObject("Part::Cut","Cut")
+		basic_tee = self.document.addObject("Part::Cut","Cut")
 		basic_tee.Base = outer_fusion
 		basic_tee.Tool = inner_fusion
 		
 		# Remove place for suckets
-		socket_left = document.addObject("Part::Cylinder","SocketLeft")
+		socket_left = self.document.addObject("Part::Cylinder","SocketLeft")
 		socket_left.Radius = self.socketD /2
 		socket_left.Height = (self.L/2 - self.G)*(1+RELATIVE_EPSILON)
 		socket_left.Placement = App.Placement(App.Vector(-socket_left.Height - self.G,0,0), App.Rotation(App.Vector(0,1,0),90), App.Vector(0,0,0))
 		
-		socket_right = document.addObject("Part::Cylinder","SocketRight")
+		socket_right = self.document.addObject("Part::Cylinder","SocketRight")
 		socket_right.Radius = self.socketD /2
 		socket_right.Height = (self.L/2 - self.G)*(1+RELATIVE_EPSILON)
 		socket_right.Placement = App.Placement(App.Vector(self.G,0,0), App.Rotation(App.Vector(0,1,0),90), App.Vector(0,0,0))
 		
-		socket_top = document.addObject("Part::Cylinder","SocketTop")
+		socket_top = self.document.addObject("Part::Cylinder","SocketTop")
 		socket_top.Radius = self.socketD /2
 		socket_top.Height = (self.H1 - self.G1)*(1+RELATIVE_EPSILON)
 		socket_top.Placement = App.Placement(App.Vector(0,0,self.G1), App.Rotation(App.Vector(0,1,0),0), App.Vector(0,0,0))
 		
-		sockets_fusion = App.activeDocument().addObject("Part::MultiFuse","Sockets")
+		sockets_fusion = self.document.addObject("Part::MultiFuse","Sockets")
 		sockets_fusion.Shapes = [socket_left,socket_right,socket_top]
 		#document.recompute()
 		# remove sockets from the basic tee
-		tee = App.activeDocument().addObject("Part::Cut","Tee")
+		tee = self.document.addObject("Part::Cut","Tee")
 		tee.Base = basic_tee
 		tee.Tool = sockets_fusion
+		return tee
 
-tee = Tee()
-tee.create(document)
+# Create a part following from the dimensions from NPS_PVC_TABLE and TEE_TABLE.
+class TeeFromTable:
+	def __init__ (self, document):
+		self.document = document
+	@staticmethod
+	def findPipeDimensions(npsPipeSizeName, schedule):
+		"""Returns single row or None"""
+		for row in NPS_PVC_TABLE:
+			if row[NPS_NAME_COLUMN_INDEX]==npsPipeSizeName	and row[NPS_SCHEDULE_COLUMN_INDEX]==schedule:
+				return row
+		return None
+
+	@staticmethod
+	def findPart(partName):
+		for row in TEE_TABLE:
+			if row[TEE_NAME_COLUMN_INDEX]==partName:
+				return row
+		return row
+
+	def create(self, partName, convertToSolid = True):
+		tee = Tee(self.document)
+		row = TeeFromTable.findPart(partName)
+		if row is None:
+			print("Part not found")
+			return
+		tee.G = tu("%f in"%row[TEE_G_COLUMN_INDEX])
+		tee.G1 = tu("%f in"%row[TEE_G1_COLUMN_INDEX])
+		tee.H = tu("%f in"%row[TEE_H_COLUMN_INDEX]) # It is L/2 for symetrical Tee. Why extra dimension?
+		tee.H1 = tu("%f in"%row[TEE_H1_COLUMN_INDEX])
+		tee.L = tu("%f in"%row[TEE_L_COLUMN_INDEX])
+		tee.M = tu("%f in"%row[TEE_M_COLUMN_INDEX])
+
+
+		# get pipe dimensions
+		pipe_dims =TeeFromTable.findPipeDimensions(row[TEE_PIPE_SIZE_NAME_COLUMN_INDEX],row[TEE_SCHEDULE_COLUMN_INDEX])
+
+		if pipe_dims is None:
+			print("No pipe dimensions found")
+			return
+
+		tee.socketD = tu("%f in"%pipe_dims[NPS_OUTER_DIAMETER_COLUMN_INDEX])
+		tee.innerD = tu("%f in"%pipe_dims[NPS_INNER_DIAMETER_COLUMN_INDEX])
+		return tee.create()
+
+#tee = Tee()
+#tee.create(document)
+tee2 = TeeFromTable(document)
+tee2.create('401-003')
 document.recompute()
