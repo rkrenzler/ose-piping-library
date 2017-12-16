@@ -78,6 +78,9 @@ TEE_L_COLUMN_INDEX = 7
 TEE_M_COLUMN_INDEX = 8
 TEE_WEIGHT_COLUMN_INDEX = 9 # LBS, Not used now
 
+# The headers are used by the GUI.
+TEE_TABLE_HEADERS =["Part name", "Size", "Schedule", "G", "G1", "H", "H1", "M", "Weights LBS"]
+
 TEE_TABLE = [['401-003', '3/8"', 40, 3/8.0, 3/8.0, 1+1/8.0, 1+1/8.0, 2+1/4.0, 31/32.0, .04],
 ['401-005', '1/2"', 40, 1/2.0, 1/2.0, 1+1/4.0, 1+1/4.0, 2+1/2.0, 1+3/32.0, .06],
 ['401-007', '3/4"', 40, 9/16.0, 9/16.0, 1+9/16.0, 1+9/16.0, 3+1/8.0, 1+5/16.0, .10],
@@ -197,8 +200,112 @@ class TeeFromTable:
 		tee.innerD = tu("%f in"%pipe_dims[NPS_INNER_DIAMETER_COLUMN_INDEX])
 		return tee.create()
 
-#tee = Tee()
-#tee.create(document)
-tee2 = TeeFromTable(document)
-tee2.create('401-003')
-document.recompute()
+
+class PartTableModel(QtCore.QAbstractTableModel): 
+	def __init__(self, parent=None, *args): 
+		QtCore.QAbstractTableModel.__init__(self, parent, *args) 
+	
+	def rowCount(self, parent): 
+		return len(TEE_TABLE) 
+ 
+	def columnCount(self, parent):
+		return len(TEE_TABLE_HEADERS) 
+ 
+	def data(self, index, role):
+		if not index.isValid(): 
+			#return QtCore.QVariant() 
+			return None
+		elif role != QtCore.Qt.DisplayRole: 
+			#return QtCore.QVariant() 
+			return None
+		#return QtCore.QVariant(ELBOW_90_TABLE[index.row()][index.column()]) 
+		return TEE_TABLE[index.row()][index.column()] 
+
+	def getPartName(self, rowIndex):
+		return TEE_TABLE_HEADERS[rowIndex][0]
+
+	def headerData(self, col, orientation, role):
+		if orientation ==QtCore. Qt.Horizontal and role == QtCore.Qt.DisplayRole:
+			return TEE_TABLE_HEADERS[col]
+		return None
+
+class GuiTee(QtGui.QDialog):
+	"""Return index of the row in the NPC_PVC library.
+		Return -1 if nothing is selected.
+	"""
+	def __init__(self):
+		super(GuiTee, self).__init__()
+		self.initUi()
+	def initUi(self): 
+		Dialog = self # Added 
+		self.result = -1 
+		self.setupUi(self)
+		# Fill table with dimensions.
+		self.initTable()
+		self.show()
+# The next lines are from QtDesigner .ui-file processed by pyside-uic
+# pyside-uic --indent=0 ycreate-tee.ui -o tmp.py
+	def setupUi(self, Dialog):
+	# This code is from tmp.py.
+		Dialog.setObjectName("Dialog")
+		Dialog.resize(619, 277)
+		self.buttonBox = QtGui.QDialogButtonBox(Dialog)
+		self.buttonBox.setGeometry(QtCore.QRect(310, 240, 301, 32))
+		self.buttonBox.setOrientation(QtCore.Qt.Horizontal)
+		self.buttonBox.setStandardButtons(QtGui.QDialogButtonBox.Cancel|QtGui.QDialogButtonBox.Ok)
+		self.buttonBox.setObjectName("buttonBox")
+		self.tableViewParts = QtGui.QTableView(Dialog)
+		self.tableViewParts.setGeometry(QtCore.QRect(10, 40, 601, 192))
+		self.tableViewParts.setSelectionMode(QtGui.QAbstractItemView.SingleSelection)
+		self.tableViewParts.setSelectionBehavior(QtGui.QAbstractItemView.SelectRows)
+		self.tableViewParts.setObjectName("tableViewParts")
+		self.checkBoxCreateSolid = QtGui.QCheckBox(Dialog)
+		self.checkBoxCreateSolid.setGeometry(QtCore.QRect(10, 10, 171, 22))
+		self.checkBoxCreateSolid.setChecked(True)
+		self.checkBoxCreateSolid.setObjectName("checkBoxCreateSolid")
+
+		self.retranslateUi(Dialog)
+		QtCore.QObject.connect(self.buttonBox, QtCore.SIGNAL("accepted()"), Dialog.accept)
+		QtCore.QObject.connect(self.buttonBox, QtCore.SIGNAL("rejected()"), Dialog.reject)
+		QtCore.QMetaObject.connectSlotsByName(Dialog)
+
+	def retranslateUi(self, Dialog):
+		# Add data from tmp.py here.
+		Dialog.setWindowTitle(QtGui.QApplication.translate("Dialog", "Create Tee", None, QtGui.QApplication.UnicodeUTF8))
+		self.checkBoxCreateSolid.setText(QtGui.QApplication.translate("Dialog", "Create Solid", None, QtGui.QApplication.UnicodeUTF8))
+
+	def initTable(self):
+		model = PartTableModel()
+		self.tableViewParts.setModel(model)
+
+	def getSelectedName(self):
+		sel = form.tableViewParts.selectionModel()
+		if sel.isSelected:
+			if len(sel.selectedRows())> 0:
+				rowIndex = sel.selectedRows()[0].row()
+				#return model.getPartName(rowIndex) # This does not work. Why?
+				return TEE_TABLE_HEADERS[rowIndex][0]
+		return None
+
+	def accept(self):
+		"""User clicked OK"""
+		# Get suitable row from the the table.
+		partName = self.getSelectedName()
+		createSolid = self.checkBoxCreateSolid.isChecked()
+		if partName is not None:
+			#self.storeInput()
+			tee = TeeFromTable(document)
+			tee.create(partName, createSolid)
+			document.recompute()
+			# Call parent class.
+			super(GuiTee, self).accept()
+		else:
+			msgBox = QtGui.QMessageBox()
+			msgBox.setText("Select part")
+			msgBox.exec_()
+
+
+#tee2 = TeeFromTable(document)
+#tee2.create('401-003')
+form = GuiTee()
+#document.recompute()
