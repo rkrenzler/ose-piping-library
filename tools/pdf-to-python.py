@@ -37,7 +37,10 @@ def process_line(line, schedule):
     # 0-th word contains a string value. Put it between quotation marks.
     first = words.pop(0)
     result = "'"+first+"\'"
-    # 1-word contains the scheduler value
+    # 1-th word will be added converted to astring with a quantity
+    # with inch unite. That is 1/2->'1/2"'.
+    result += ", '"+words[1]+'"\''
+    # 2-word contains the scheduler value
     result += ", %d"%schedule
     for word in words:
         result+=", "+process_value(word)
