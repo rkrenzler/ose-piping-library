@@ -1,0 +1,40 @@
+from PySide import QtCore, QtGui
+import FreeCAD
+import Spreadsheet
+import Sketcher
+import Part
+
+# Use this function to convert string like "1 cm" or "1 in" quntities with units.
+
+tu = FreeCAD.Units.parseQuantity 
+document = App.activeDocument()
+
+class GuiClassNameClass(QtGui.QDialog):
+	"""Return index of the row in the NPC_PVC library.
+		Return -1 if nothing is selected.
+	"""
+	def __init__(self):
+		super(GuiClassNameClass, self).__init__()
+		self.initUi()
+	def initUi(self): 
+		Dialog = self # Added 
+		self.result = -1 
+		self.setupUi(self)
+		# Fill table with dimensions.
+
+# The next lines are from QtDesigner .ui-file processed by pyside-uic
+# pyside-uic --indent=0 your-qtdesigner-file.ui -o yourpythonfile.py
+
+	def setupUi(self, Dialog):
+		# Add data from yourpythonfile.py here
+		pass
+	def retranslateUi(self, Dialog):
+		# Add data from yourpythonfile.py here.
+		pass
+	def accept(self):
+		# When OK is clicked.
+		pass
+
+# Start dialog.
+form = GuiClassNameClass()
+
