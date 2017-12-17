@@ -1,0 +1,288 @@
+# -*- coding: utf-8 -*-
+# Author: Ruslan Krenzler.
+# 02 December 2017.
+
+# For a gui documentation see https://www.freecadweb.org/wiki/PySide_Medium_Examples
+from PySide import QtGui, QtCore 
+import sys # for PySide GUI
+import FreeCAD
+import Part
+
+document = App.activeDocument()
+tu = FreeCAD.Units.parseQuantity
+
+# The value RELATIVE_EPSILON is used to slightly change the size of a subtracted part
+# to prevent problems with boolean operations.
+# This value does not change the appearance of part and can be large.
+# If the original value is L then we often use the value L*(1+RELATIVE_EPSILON) instead.
+# The relative deviation is then (L*(1+RELATIVE_EPSILON)-L)/L = RELATIVE_EPSILON.
+# That is why the constant has "relative" in its name.
+RELATIVE_EPSILON = 0.1
+
+# Here are tables for NPS PVC pipe sizes from http://opensourceecology.org/wiki/PVC_Pipe.
+# Sizes are in inches. 
+# The coums are "Name", "Schedule", "O.D [in]", "Average I.D.[in]",
+# "Min. Wall [in]", "Nom.[Wt./Ft.]", "Max. W.P. [PSI])"
+
+NPS_NAME_COLUMN_INDEX = 0
+NPS_SCHEDULE_COLUMN_INDEX = 1
+NPS_OUTER_DIAMETER_COLUMN_INDEX = 2
+NPS_INNER_DIAMETER_COLUMN_INDEX = 3
+
+# Source: http://opensourceecology.org/wiki/PVC_Pipe
+NPS_PVC_TABLE = [
+	['1/8"', 40, 0.405,0.249,0.068,0.051,810],
+	['1/4"', 40, 0.540,0.344,0.088, 0.086, 780],
+	['3/8"', 40, 0.675, 0.473, 0.091, 0.115, 620],
+	['1/2"', 40, 0.840, 0.602, 0.109, 0.170, 600],
+	['3/4"', 40, 1.050, 0.804, 0.113, 0.226, 480],
+	['1"', 40, 1.315, 1.029, 0.133, 0.333, 450],
+	['1-1/4"', 40, 1.660, 1.360, 0.140, 0.450, 370],
+	['1-1/2"', 40, 1.900, 1.590, 0.145, 0.537, 330],
+	['2"', 40, 2.375, 2.047, 0.154, 0.720, 280],
+	['2-1/2"', 40, 2.875, 2.445, 0.203, 1.136, 300],
+	['3"', 40, 3.500, 3.042, 0.216, 1.488, 260],
+	['3-1/2"', 40, 4.000, 3.521, 0.226, 1.789, 240],
+	['4"', 40, 4.500, 3.998, 0.237, 2.118, 220],
+	['5"', 40, 5.563, 5.016, 0.258, 2.874, 190],
+	['6"', 40, 6.625, 6.031, 0.280, 3.733, 180],
+	['8"', 40, 8.625, 7.942, 0.322, 5.619, 160],
+	['10"', 40, 10.750, 9.976, 0.365, 7.966, 140],
+	['12"', 40, 12.750, 11.889, 0.406, 10.534, 130],
+	['1/8"',80, .405, .195, 0.095, 0.063, 1230],
+	['1/4"',80, .540, .282, 0.119, 0.105, 1130],
+	['3/8"',80, .675, .403, 0.126, 0.146, 920],
+	['1/2"',80, .840, .526, 0.147, 0.213, 850],
+	['3/4"',80, 1.050, .722, 0.154, 0.289, 690],
+	['1"',80, 1.315, .936, 0.179, 0.424, 630],
+	['1-1/4"',80, 1.660, 1.255, 0.191, 0.586, 520],
+	['1-1/2"',80, 1.900, 1.476, 0.200, 0.711, 470],
+	['2"',80, 2.375,1.913, 0.218, 0.984, 400],
+	['2-1/2"',80, 2.875, 2.290, 0.276, 1.500, 420],
+	['3"',80, 3.500, 2.864, 0.300, 2.010, 370],
+	['3-1/2"',80, 4.000, 3.326, 0.318, 2.452, 350],
+	['4"',80, 4.500, 3.786, 0.337, 2.938, 320],
+	['5"',80, 5.563, 4.768, 0.375, 4.078, 290],
+	['6"',80, 6.625, 5.709, 0.432, 5.610, 280],
+	['8"',80, 8.625, 7.565, 0.500, 8.522, 250],
+	['10"',80, 10.750, 9.493, 0.593, 12.635, 230],
+	['12"',80 ,12.750, 11.294, 0.687, 17.384, 230]]
+
+
+class Pipe:
+	"""Create a pipe in a document"""
+
+	def __init__(self, document):
+		self.document = document
+		self.outerD = tu("0.540 in")
+		self.innerD = tu("0.344 in")
+		self.length = tu("1 ft")
+
+	def toSolid(document, part, name):
+		"""Convert object to a solid.
+			Basically those are commands, which FreeCAD runs when user converts a part to a solid.
+		"""
+		s = part.Shape.Faces
+		s = Part.Solid(Part.Shell(s))
+		o = document.addObject("Part::Feature", name)
+		o.Label=name
+		o.Shape=s
+		return o
+	@staticmethod
+	def NestedObjects(group):
+		res = []
+		if group.OutList == []:
+			res.append(group)
+		else:
+			# Append children first.
+			for o in group.OutList:
+				res += Pipe.NestedObjects(o)
+			res.append(group)
+		return res
+
+	def create(self, convertToSolid):
+		""" A pipe which is a differences of two cilinders: outer cylinder - inner cylinder.
+		:param convertToSolid: if true, the resulting part will be solid.
+			if false, the resulting part will be a cut.
+		:return resulting part.
+		"""
+		# Create outer cylinder.
+		outer_cylinder = self.document.addObject("Part::Cylinder","OuterCylinder")
+		outer_cylinder.Radius = self.outerD/2
+		outer_cylinder.Height = self.length
+		
+		# Create inner cylinder. It is a little bit longer than the outer cylider in both ends.
+		# This should prevent numerical problems when calculating difference
+		# between the outer and innter cylinder.
+		inner_cylinder = self.document.addObject("Part::Cylinder","InnerCylinder")
+		inner_cylinder.Radius = self.innerD/2
+		inner_cylinder.Height = self.length*(1+2*RELATIVE_EPSILON)
+		inner_cylinder.Placement = App.Placement(App.Vector(0,0,-self.length*RELATIVE_EPSILON), App.Rotation(App.Vector(0,1,0),0), App.Vector(0,0,0))
+		cut = self.document.addObject("Part::Cut","Pipe")
+		cut.Base = outer_cylinder
+		cut.Tool = inner_cylinder
+		# Before making a solid, recompute documents. Otherwise there will be
+		if convertToSolid:
+			# Before making a solid, recompute documents. Otherwise there will be
+			#    s = Part.Solid(Part.Shell(s))
+			#    <class 'Part.OCCError'>: Shape is null
+			# exception.
+			document.recompute()
+			# Now convert all parts to solid, and remove intermediate data.
+			solid = self.toSolid(document, cut, "pipe (solid)")
+			# Remove previous (intermediate parts).
+			parts = Tee.NestedObjects(tee)
+			# Document.removeObjects can remove multple objects, when we use
+			# parts directly. To prevent exceptions with deleted objects,
+			# use the name list instead.
+			names_to_remove = []
+			for part in parts:
+				if part.Name not in names_to_remove:
+					names_to_remove.append(part.Name)
+			for name in names_to_remove:
+				print("Deleting temporary objects %s."%name)
+				document.removeObject(name)
+			return solid
+		return cut
+
+class PipeFromTable:
+	"""Create a part with dimensions in NPS_PVC_TABLE."""
+	def __init__ (self, document):
+		self.document = document
+
+	@staticmethod
+	def getValuesInColumn(columnIndex):
+		""" Return a list of column values from
+			NPC_PVC_TABLE. Equal values are ignored
+			(only one copy is added)
+			:param index: index of the column.
+		"""
+		res = [] # Resulting values
+		for row in NPS_PVC_TABLE:
+			if row[columnIndex] not in res:
+				res.append(row[columnIndex])
+		return res
+
+	@staticmethod
+	def selectRow(name, sched):
+		"""Get a row from the DPC_PVC Table
+		:param name: name of the dimension row (pipe size).
+		:sched shed: Schedule (pipe wall width)
+		:return row from the NPC_PVC table or None if no row fiound.
+		"""
+		for row in NPS_PVC_TABLE:
+			if row[NPS_NAME_COLUMN_INDEX] == name and row[NPS_SCHEDULE_COLUMN_INDEX] == sched:
+				return row
+		return None
+
+	def create(self, name, sched, length, convertToSolid = True):
+		pipe = Pipe(self.document)
+		row = PipeFromTable.selectRow(name, sched)
+		if row is None:
+			print("Part not found")
+			return
+		pipe.outerD = tu("%f in"%row[NPS_OUTER_DIAMETER_COLUMN_INDEX])
+		pipe.innerD = tu("%f in"%row[NPS_INNER_DIAMETER_COLUMN_INDEX])
+		pipe.length = length
+		return pipe.create(convertToSolid)
+
+
+class CreatePvcPipeNpsGuiClass(QtGui.QDialog):
+	QSETTINGS_APPLICATION = "OSE piping freecad macros"
+	QSETTINGS_NAME = "pipe user input"
+	def __init__(self):
+		super(CreatePvcPipeNpsGuiClass, self).__init__()
+		self.initUI()
+	def initUI(self): 
+		Dialog = self # Added 
+		self.result = -1 
+		self.setupUi(self)
+		# Fill scheduler and name comboboxes according to NPC_PVC table
+		self.initSizes()
+		self.show()
+
+# The next lines are from QtDesigner .ui-file processed by pyside-uic
+	def setupUi(self, Dialog):
+		Dialog.setObjectName("Dialog")
+		Dialog.resize(334, 141)
+		self.buttonBox = QtGui.QDialogButtonBox(Dialog)
+		self.buttonBox.setGeometry(QtCore.QRect(10, 90, 301, 32))
+		self.buttonBox.setOrientation(QtCore.Qt.Horizontal)
+		self.buttonBox.setStandardButtons(QtGui.QDialogButtonBox.Cancel|QtGui.QDialogButtonBox.Ok)
+		self.buttonBox.setObjectName("buttonBox")
+		self.layoutWidget = QtGui.QWidget(Dialog)
+		self.layoutWidget.setGeometry(QtCore.QRect(30, 20, 87, 52))
+		self.layoutWidget.setObjectName("layoutWidget")
+		self.verticalLayout_2 = QtGui.QVBoxLayout(self.layoutWidget)
+		self.verticalLayout_2.setContentsMargins(0, 0, 0, 0)
+		self.verticalLayout_2.setObjectName("verticalLayout_2")
+		self.label = QtGui.QLabel(self.layoutWidget)
+		self.label.setObjectName("label")
+		self.verticalLayout_2.addWidget(self.label)
+		self.comboBoxName = QtGui.QComboBox(self.layoutWidget)
+		self.comboBoxName.setObjectName("comboBoxName")
+		self.verticalLayout_2.addWidget(self.comboBoxName)
+		self.layoutWidget_2 = QtGui.QWidget(Dialog)
+		self.layoutWidget_2.setGeometry(QtCore.QRect(130, 20, 87, 52))
+		self.layoutWidget_2.setObjectName("layoutWidget_2")
+		self.verticalLayout = QtGui.QVBoxLayout(self.layoutWidget_2)
+		self.verticalLayout.setContentsMargins(0, 0, 0, 0)
+		self.verticalLayout.setObjectName("verticalLayout")
+		self.label_2 = QtGui.QLabel(self.layoutWidget_2)
+		self.label_2.setObjectName("label_2")
+		self.verticalLayout.addWidget(self.label_2)
+		self.comboBoxScheduler = QtGui.QComboBox(self.layoutWidget_2)
+		self.comboBoxScheduler.setObjectName("comboBoxScheduler")
+		self.verticalLayout.addWidget(self.comboBoxScheduler)
+		self.layoutWidget_3 = QtGui.QWidget(Dialog)
+		self.layoutWidget_3.setGeometry(QtCore.QRect(230, 20, 81, 52))
+		self.layoutWidget_3.setObjectName("layoutWidget_3")
+		self.verticalLayout_3 = QtGui.QVBoxLayout(self.layoutWidget_3)
+		self.verticalLayout_3.setContentsMargins(0, 0, 0, 0)
+		self.verticalLayout_3.setObjectName("verticalLayout_3")
+		self.label_3 = QtGui.QLabel(self.layoutWidget_3)
+		self.label_3.setObjectName("label_3")
+		self.verticalLayout_3.addWidget(self.label_3)
+		self.lineEdit = QtGui.QLineEdit(self.layoutWidget_3)
+		self.lineEdit.setObjectName("lineEdit")
+		self.verticalLayout_3.addWidget(self.lineEdit)
+		
+		self.retranslateUi(Dialog)
+		QtCore.QObject.connect(self.buttonBox, QtCore.SIGNAL("accepted()"), Dialog.accept)
+		QtCore.QObject.connect(self.buttonBox, QtCore.SIGNAL("rejected()"), Dialog.reject)
+		QtCore.QMetaObject.connectSlotsByName(Dialog)
+
+	def retranslateUi(self, Dialog):
+		Dialog.setWindowTitle(QtGui.QApplication.translate("Dialog", "Dialog", None, QtGui.QApplication.UnicodeUTF8))
+		self.label.setText(QtGui.QApplication.translate("Dialog", "Size:", None, QtGui.QApplication.UnicodeUTF8))
+		self.label_2.setText(QtGui.QApplication.translate("Dialog", "Scheduler:", None, QtGui.QApplication.UnicodeUTF8))
+		self.label_3.setText(QtGui.QApplication.translate("Dialog", "Length:", None, QtGui.QApplication.UnicodeUTF8))
+		self.lineEdit.setText(QtGui.QApplication.translate("Dialog", "1ft", None, QtGui.QApplication.UnicodeUTF8))
+
+	def initSizes(self):
+		# Get all possible sizes.
+		scheds = PipeFromTable.getValuesInColumn(NPS_SCHEDULE_COLUMN_INDEX)
+		for sched in scheds:
+			self.comboBoxScheduler.addItem(str(sched))
+		names = PipeFromTable.getValuesInColumn(NPS_NAME_COLUMN_INDEX)
+		for name in names:
+			self.comboBoxName.addItem(name)
+	
+	def accept(self):
+		# Get suitable row from the the table.
+		name = self.comboBoxName.currentText()
+		sched = int(self.comboBoxScheduler.currentText())
+		length = tu("1 ft")
+		row = PipeFromTable.selectRow(name, sched)
+		if row is not None:
+			pipe = PipeFromTable(document)
+			pipe.create(name, sched, length,False)
+		else:
+			print("Dimiensions not found")
+		# Call parent class.
+		document.recompute()
+		super(CreatePvcPipeNpsGuiClass, self).accept()
+
+# Show Dialog
+form = CreatePvcPipeNpsGuiClass()
+
