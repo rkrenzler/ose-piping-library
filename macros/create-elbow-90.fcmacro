@@ -69,26 +69,14 @@ NPS_PVC_TABLE = [
 	['10"',80, 10.750, 9.493, 0.593, 12.635, 230],
 	['12"',80 ,12.750, 11.294, 0.687, 17.384, 230]]
 
-TEE_PART_NAME_COLUMN_INDEX = 0
-TEE_PIPE_SIZE_NAME_COLUMN_INDEX = 1
-TEE_SCHEDULE_COLUMN_INDEX = 2
-TEE_G_COLUMN_INDEX = 3
-TEE_G1_COLUMN_INDEX = 4
-TEE_H_COLUMN_INDEX = 5
-TEE_H1_COLUMN_INDEX = 6
-TEE_L_COLUMN_INDEX = 7
-TEE_M_COLUMN_INDEX = 8
-TEE_WEIGHT_COLUMN_INDEX = 9 # LBS, Not used now
-
 # The headers are used by the GUI.
 ELBOW_90_HEADERS =["Part Number", "Size", "Schedule", "G", "H","M"]
 ELBOW_90_PART_NAME_COLUMN_INDEX = 0
 ELBOW_90_PIPE_SIZE_NAME_COLUMN_INDEX = 1
-ELBOW_90_SCHEDULE_COLUNN_INDEX = 2
+ELBOW_90_SCHEDULE_COLUMN_INDEX = 2
 ELBOW_90_G_COLUMN_INDEX = 3
 ELBOW_90_H_COLUMN_INDEX = 4
 ELBOW_90_M_COLUMN_INDEX = 5
-ELBOW_90_HEADERS =["Part Number", "Size", "Schedule", "G", "H","M"]
 # The dimensions are from https://www.aetnaplastics.com/
 ELBOW_90_TABLE=[['406-003','3/8"' , 40, 3/8.0, 1+1/8.0, 7/8.0],
 ['406-005','1/2"', 40, 1/2.0, 1+1/4.0, 1+1/8.0],
@@ -162,7 +150,7 @@ class Elbow:
 		else:
 			# Append children first.
 			for o in group.OutList:
-				res += Tee.NestedObjects(o)
+				res += Elbow.NestedObjects(o)
 			res.append(group)
 		return res
 
@@ -316,7 +304,7 @@ class Elbow90:
 		elbow.len1 = self.H - self.G
 		elbow.len2 =elbow.len1
 		return elbow.create(convertToSolid)
-# Create a part with dimensions from NPS_PVC_TABLE and TEE_TABLE.
+# Create a part with dimensions from NPS_PVC_TABLE and ELBOW_90_TABLE.
 class Elbow90FromTable:
 	def __init__ (self, document):
 		self.document = document
@@ -324,7 +312,7 @@ class Elbow90FromTable:
 	def findPipeDimensions(npsPipeSizeName, schedule):
 		"""Returns single row or None"""
 		for row in NPS_PVC_TABLE:
-			if row[NPS_NAME_COLUMN_INDEX]==npsPipeSizeName	and row[NPS_SCHEDULE_COLUNN_INDEX]==schedule:
+			if row[NPS_NAME_COLUMN_INDEX]==npsPipeSizeName	and row[NPS_SCHEDULE_COLUMN_INDEX]==schedule:
 				return row
 		return None
 
@@ -346,7 +334,7 @@ class Elbow90FromTable:
 		elbow90.M = tu("%f in"%row[ELBOW_90_M_COLUMN_INDEX])
 
 		# get pipe dimensions
-		pipe_dims =TeeFromTable.findPipeDimensions(row[TEE_PIPE_SIZE_NAME_COLUMN_INDEX],row[TEE_SCHEDULE_COLUMN_INDEX])
+		pipe_dims =Elbow90FromTable.findPipeDimensions(row[ELBOW_90_PIPE_SIZE_NAME_COLUMN_INDEX],row[ELBOW_90_SCHEDULE_COLUMN_INDEX])
 
 		if pipe_dims is None:
 			print("No pipe dimensions found")
@@ -356,15 +344,49 @@ class Elbow90FromTable:
 		elbow90.innerD = tu("%f in"%pipe_dims[NPS_INNER_DIAMETER_COLUMN_INDEX])
 		return elbow90.create(convertToSolid)
 
+class PartTableModel(QtCore.QAbstractTableModel): 
+	def __init__(self, parent=None, *args): 
+		QtCore.QAbstractTableModel.__init__(self, parent, *args) 
+	
+	def rowCount(self, parent): 
+		return len(E) 
+ 
+	def columnCount(self, parent):
+		return len(ELBOW_90_TABLE) 
+ 
+	def data(self, index, role):
+		if not index.isValid(): 
+			return None
+		elif role != QtCore.Qt.DisplayRole: 
+			return None
+		return ELBOW_90_TABLE[index.row()][index.column()] 
+
+	def getPartName(self, rowIndex):
+		return ELBOW_90_TABLE[rowIndex][ELBOW_90_PART_NAME_COLUMN_INDEX]
+
+	def getPartRowIndex(self, partName):
+		""" Return row indes of the part with name partName.
+		:param :partName name of the part
+		:return index of the first row whose part name is equal to partName
+				return -1 if no row find.
+		"""
+		for row_i in range(ELBOW_90_PART_NAME_COLUMN_INDEX, len(ELBOW_90_TABLE)):
+			if ELBOW_90_TABLE[row_i][ELBOW_90_PART_NAME_COLUMN_INDEX] == partName:
+				return row_i
+		return -1
+	def headerData(self, col, orientation, role):
+		if orientation ==QtCore. Qt.Horizontal and role == QtCore.Qt.DisplayRole:
+			return ELBOW_90_HEADERS[col]
+		return None
 
 class GuiElbow90(QtGui.QDialog):
 	QSETTINGS_APPLICATION = "OSE piping freecad macros"
-	QSETTINGS_NAME = "tee user input"
+	QSETTINGS_NAME = "elbow user input"
 	"""Return index of the row in the NPC_PVC library.
 		Return -1 if nothing is selected.
 	"""
 	def __init__(self):
-		super(GuiTee, self).__init__()
+		super(GuiElbow90, self).__init__()
 		self.initUi()
 	def initUi(self): 
 		Dialog = self # Added 
@@ -383,9 +405,8 @@ class GuiElbow90(QtGui.QDialog):
 		self.show()
 
 # The following lines are from QtDesigner .ui-file processed by pyside-uic
-# pyside-uic --indent=0 ycreate-tee.ui -o tmp.py
+# pyside-uic --indent=0 create-elbow.ui -o tmp.py
 	def setupUi(self, Dialog):
-	# This code is from tmp.py.
 		Dialog.setObjectName("Dialog")
 		Dialog.resize(619, 277)
 		self.buttonBox = QtGui.QDialogButtonBox(Dialog)
@@ -408,8 +429,9 @@ class GuiElbow90(QtGui.QDialog):
 		QtCore.QObject.connect(self.buttonBox, QtCore.SIGNAL("rejected()"), Dialog.reject)
 		QtCore.QMetaObject.connectSlotsByName(Dialog)
 
+# The following lines are from QtDesigner .ui-file processed by pyside-uic
 	def retranslateUi(self, Dialog):
-		Dialog.setWindowTitle(QtGui.QApplication.translate("Dialog", "Create Tee", None, QtGui.QApplication.UnicodeUTF8))
+		Dialog.setWindowTitle(QtGui.QApplication.translate("Dialog", "Create 90° elbow", None, QtGui.QApplication.UnicodeUTF8))
 		self.checkBoxCreateSolid.setText(QtGui.QApplication.translate("Dialog", "Create Solid", None, QtGui.QApplication.UnicodeUTF8))
 
 	def initTable(self):
@@ -437,13 +459,13 @@ class GuiElbow90(QtGui.QDialog):
 		partName = self.getSelectedPartName()
 		createSolid = self.checkBoxCreateSolid.isChecked()
 		if partName is not None:
-			tee = TeeFromTable(document)
-			tee.create(partName, createSolid)
+			elbow = Elbow90FromTable(document)
+			elbow.create(partName, createSolid)
 			document.recompute()
 			# Save user input for the next dialog call.
 			self.saveInput()
 			# Call parent class.
-			super(GuiTee, self).accept()
+			super(GuiElbow90, self).accept()
 		else:
 			msgBox = QtGui.QMessageBox()
 			msgBox.setText("Select part")
@@ -451,24 +473,22 @@ class GuiElbow90(QtGui.QDialog):
 		
 	def saveInput(self):
 		"""Store user input for the next run."""
-		settings = QtCore.QSettings(GuiTee.QSETTINGS_APPLICATION, GuiTee.QSETTINGS_NAME)
+		settings = QtCore.QSettings(GuiElbow90.QSETTINGS_APPLICATION, GuiElbow90.QSETTINGS_NAME)
 		check = self.checkBoxCreateSolid.checkState()
 		settings.setValue("checkBoxCreateSolid", int(check))
 		settings.setValue("LastSelectedPartName", self.getSelectedPartName())
 		settings.sync()
 	def restoreInput(self):
-		settings = QtCore.QSettings(GuiTee.QSETTINGS_APPLICATION, GuiTee.QSETTINGS_NAME)
+		settings = QtCore.QSettings(GuiElbow90.QSETTINGS_APPLICATION, GuiElbow90.QSETTINGS_NAME)
 		checkState = QtCore.Qt.CheckState(int(settings.value("checkBoxCreateSolid")))
 		self.checkBoxCreateSolid.setCheckState(checkState)
 		self.selectPartByName(settings.value("LastSelectedPartName"))
 
 
-#TestTable()
-#form = GuiTee()
-
 #elbow = Elbow(document)
 #elbow.create(True)
 
+# Test macro.
 def Test90Talbe():
 	elbow = Elbow90FromTable(document)
 	for row in ELBOW_90_TABLE:
@@ -478,13 +498,7 @@ def Test90Talbe():
 		document.recompute()
 		
 
-#TestTable()
-#form = GuiTee()
-
-#elbow = Elbow(document)
-#elbow.create()
-Test90Talbe()
-
+form = GuiElbow90()
 
 document.recompute()
 
