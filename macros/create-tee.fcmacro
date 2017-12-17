@@ -29,6 +29,8 @@ NPS_SCHEDULE_COLUMN_INDEX = 1
 NPS_OUTER_DIAMETER_COLUMN_INDEX = 2
 NPS_INNER_DIAMETER_COLUMN_INDEX = 3
 
+# Source: http://opensourceecology.org/wiki/PVC_Pipe
+
 NPS_PVC_TABLE = [
 	['1/8"', 40, 0.405,0.249,0.068,0.051,810],
 	['1/4"', 40, 0.540,0.344,0.088, 0.086, 780],
@@ -220,7 +222,7 @@ class Tee:
 		tee.Base = basic_tee
 		tee.Tool = sockets_fusion
 		if convertToSolid:
-			# Before making a solid recompute documents. Otherwise there will be
+			# Before making a solid, recompute documents. Otherwise there will be
 			#    s = Part.Solid(Part.Shell(s))
 			#    <class 'Part.OCCError'>: Shape is null
 			# exception.
@@ -242,7 +244,7 @@ class Tee:
 			return solid
 		return tee
 
-# Create a part following from the dimensions from NPS_PVC_TABLE and TEE_TABLE.
+# Create a part with dimensions from NPS_PVC_TABLE and TEE_TABLE.
 class TeeFromTable:
 	def __init__ (self, document):
 		self.document = document
@@ -338,13 +340,15 @@ class GuiTee(QtGui.QDialog):
 		Dialog = self # Added 
 		self.result = -1 
 		self.setupUi(self)
-		# Fill table with dimensions. Ignore exceptions to prevent this part
-		# part of the code to prevent GUI from starting, once settings are broken.
+		# Fill table with dimensions. 
 		self.initTable()
+
+		# Restore previous user input. Ignore exceptions to prevent this part
+		# part of the code to prevent GUI from starting, once settings are broken.
 		try:
 			self.restoreInput()
 		except Exception as e:
-			print ("Could not restore old user settings!")
+			print ("Could not restore old user input!")
 			print(e)
 		self.show()
 
@@ -440,3 +444,4 @@ def TestTable():
 #TestTable()
 form = GuiTee()
 document.recompute()
+
