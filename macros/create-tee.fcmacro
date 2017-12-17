@@ -2,7 +2,7 @@
 # Author: Ruslan Krenzler.
 # Date: 16 December 2017
 # Create a tee-fitting.
-# Version 0.1
+# Version 0.2
 
 import math
 
@@ -67,7 +67,7 @@ NPS_PVC_TABLE = [
 	['10"',80, 10.750, 9.493, 0.593, 12.635, 230],
 	['12"',80 ,12.750, 11.294, 0.687, 17.384, 230]]
 
-TEE_NAME_COLUMN_INDEX = 0
+TEE_PART_NAME_COLUMN_INDEX = 0
 TEE_PIPE_SIZE_NAME_COLUMN_INDEX = 1
 TEE_SCHEDULE_COLUMN_INDEX = 2
 TEE_G_COLUMN_INDEX = 3
@@ -257,7 +257,7 @@ class TeeFromTable:
 	@staticmethod
 	def findPart(partName):
 		for row in TEE_TABLE:
-			if row[TEE_NAME_COLUMN_INDEX]==partName:
+			if row[TEE_PART_NAME_COLUMN_INDEX]==partName:
 				return row
 		return row
 
@@ -308,14 +308,26 @@ class PartTableModel(QtCore.QAbstractTableModel):
 		return TEE_TABLE[index.row()][index.column()] 
 
 	def getPartName(self, rowIndex):
-		return TEE_TABLE_HEADERS[rowIndex][0]
+		return TEE_TABLE[rowIndex][TEE_PART_NAME_COLUMN_INDEX]
 
+	def getPartRowIndex(self, partName):
+		""" Return row indes of the part with name partName.
+		:param :partName name of the part
+		:return index of the first row whose part name is equal to partName
+				return -1 if no row find.
+		"""
+		for row_i in range(TEE_PART_NAME_COLUMN_INDEX, len(TEE_TABLE)):
+			if TEE_TABLE[row_i][TEE_PART_NAME_COLUMN_INDEX] == partName:
+				return row_i
+		return -1
 	def headerData(self, col, orientation, role):
 		if orientation ==QtCore. Qt.Horizontal and role == QtCore.Qt.DisplayRole:
 			return TEE_TABLE_HEADERS[col]
 		return None
 
 class GuiTee(QtGui.QDialog):
+	QSETTINGS_APPLICATION = "OSE piping freecad macros"
+	QSETTINGS_NAME = "tee user input"
 	"""Return index of the row in the NPC_PVC library.
 		Return -1 if nothing is selected.
 	"""
@@ -326,10 +338,17 @@ class GuiTee(QtGui.QDialog):
 		Dialog = self # Added 
 		self.result = -1 
 		self.setupUi(self)
-		# Fill table with dimensions.
+		# Fill table with dimensions. Ignore exceptions to prevent this part
+		# part of the code to prevent GUI from starting, once settings are broken.
 		self.initTable()
+		try:
+			self.restoreInput()
+		except Exception as e:
+			print ("Could not restore old user settings!")
+			print(e)
 		self.show()
-# The next lines are from QtDesigner .ui-file processed by pyside-uic
+
+# The following lines are from QtDesigner .ui-file processed by pyside-uic
 # pyside-uic --indent=0 ycreate-tee.ui -o tmp.py
 	def setupUi(self, Dialog):
 	# This code is from tmp.py.
@@ -361,40 +380,59 @@ class GuiTee(QtGui.QDialog):
 		self.checkBoxCreateSolid.setText(QtGui.QApplication.translate("Dialog", "Create Solid", None, QtGui.QApplication.UnicodeUTF8))
 
 	def initTable(self):
-		model = PartTableModel()
+		self.model = PartTableModel()
 		self.tableViewParts.setModel(model)
-
-	def getSelectedName(self):
+		
+	def getSelectedPartName(self):
 		sel = form.tableViewParts.selectionModel()
 		if sel.isSelected:
 			if len(sel.selectedRows())> 0:
 				rowIndex = sel.selectedRows()[0].row()
-				#return model.getPartName(rowIndex) # This does not work. Why?
-				return TEE_TABLE_HEADERS[rowIndex][0]
+				return self.model.getPartName(rowIndex)
 		return None
+
+	def selectPartByName(self, partName):
+		"""Select first row with a part with a name partName."""
+		if partName is not None:
+			row_i = self.model.getPartRowIndex(partName)
+			if row_i >= 0:
+				self.tableViewParts.selectRow(row_i)
 
 	def accept(self):
 		"""User clicked OK"""
 		# Get suitable row from the the table.
-		partName = self.getSelectedName()
+		partName = self.getSelectedPartName()
 		createSolid = self.checkBoxCreateSolid.isChecked()
 		if partName is not None:
-			#self.storeInput()
 			tee = TeeFromTable(document)
 			tee.create(partName, createSolid)
 			document.recompute()
+			# Save user input for the next dialog call.
+			self.saveInput()
 			# Call parent class.
 			super(GuiTee, self).accept()
 		else:
 			msgBox = QtGui.QMessageBox()
 			msgBox.setText("Select part")
 			msgBox.exec_()
+		
+	def saveInput(self):
+		"""Store user input for the next run."""
+		settings = QtCore.QSettings(GuiTee.QSETTINGS_APPLICATION, GuiTee.QSETTINGS_NAME)
+		check = self.checkBoxCreateSolid.checkState()
+		settings.setValue("checkBoxCreateSolid", int(check))
+		settings.setValue("LastSelectedPartName", self.getSelectedPartName())
+		settings.sync()
+	def restoreInput(self):
+		settings = QtCore.QSettings(GuiTee.QSETTINGS_APPLICATION, GuiTee.QSETTINGS_NAME)
+		checkState = QtCore.Qt.CheckState(int(settings.value("checkBoxCreateSolid")))
+		self.checkBoxCreateSolid.setCheckState(checkState)
+		self.selectPartByName(settings.value("LastSelectedPartName"))
 
-# Create all objects from the TEE_TABLE to test parameters.
 def TestTable():
 	tee = TeeFromTable(document)
 	for row in TEE_TABLE:
-		partName = row[TEE_NAME_COLUMN_INDEX]
+		partName = row[TEE_PART_NAME_COLUMN_INDEX]
 		print("Creating part %s",partName)
 		tee.create(partName, True)
 		document.recompute()
