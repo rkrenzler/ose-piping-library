@@ -78,6 +78,7 @@ class Pipe:
 		self.innerD = tu("0.344 in")
 		self.length = tu("1 ft")
 
+	@staticmethod
 	def toSolid(document, part, name):
 		"""Convert object to a solid.
 			Basically those are commands, which FreeCAD runs when user converts a part to a solid.
@@ -129,9 +130,9 @@ class Pipe:
 			# exception.
 			document.recompute()
 			# Now convert all parts to solid, and remove intermediate data.
-			solid = self.toSolid(document, cut, "pipe (solid)")
+			solid = Pipe.toSolid(document, cut, "pipe (solid)")
 			# Remove previous (intermediate parts).
-			parts = Tee.NestedObjects(tee)
+			parts = Pipe.NestedObjects(cut)
 			# Document.removeObjects can remove multple objects, when we use
 			# parts directly. To prevent exceptions with deleted objects,
 			# use the name list instead.
@@ -187,11 +188,11 @@ class PipeFromTable:
 		return pipe.create(convertToSolid)
 
 
-class CreatePvcPipeNpsGuiClass(QtGui.QDialog):
+class PipeGui(QtGui.QDialog):
 	QSETTINGS_APPLICATION = "OSE piping freecad macros"
 	QSETTINGS_NAME = "pipe user input"
 	def __init__(self):
-		super(CreatePvcPipeNpsGuiClass, self).__init__()
+		super(PipeGui, self).__init__()
 		self.initUI()
 	def initUI(self): 
 		Dialog = self # Added 
@@ -199,19 +200,26 @@ class CreatePvcPipeNpsGuiClass(QtGui.QDialog):
 		self.setupUi(self)
 		# Fill scheduler and name comboboxes according to NPC_PVC table
 		self.initSizes()
+		# Restore previous user input. Ignore exceptions to prevent this part
+		# part of the code to prevent GUI from starting, once settings are broken.
+		try:
+			self.restoreInput()
+		except Exception as e:
+			print ("Could not restore old user input!")
+			print(e)
 		self.show()
 
 # The next lines are from QtDesigner .ui-file processed by pyside-uic
 	def setupUi(self, Dialog):
 		Dialog.setObjectName("Dialog")
-		Dialog.resize(334, 141)
+		Dialog.resize(301, 147)
 		self.buttonBox = QtGui.QDialogButtonBox(Dialog)
-		self.buttonBox.setGeometry(QtCore.QRect(10, 90, 301, 32))
+		self.buttonBox.setGeometry(QtCore.QRect(20, 110, 271, 32))
 		self.buttonBox.setOrientation(QtCore.Qt.Horizontal)
 		self.buttonBox.setStandardButtons(QtGui.QDialogButtonBox.Cancel|QtGui.QDialogButtonBox.Ok)
 		self.buttonBox.setObjectName("buttonBox")
 		self.layoutWidget = QtGui.QWidget(Dialog)
-		self.layoutWidget.setGeometry(QtCore.QRect(30, 20, 87, 52))
+		self.layoutWidget.setGeometry(QtCore.QRect(10, 40, 87, 52))
 		self.layoutWidget.setObjectName("layoutWidget")
 		self.verticalLayout_2 = QtGui.QVBoxLayout(self.layoutWidget)
 		self.verticalLayout_2.setContentsMargins(0, 0, 0, 0)
@@ -223,7 +231,7 @@ class CreatePvcPipeNpsGuiClass(QtGui.QDialog):
 		self.comboBoxName.setObjectName("comboBoxName")
 		self.verticalLayout_2.addWidget(self.comboBoxName)
 		self.layoutWidget_2 = QtGui.QWidget(Dialog)
-		self.layoutWidget_2.setGeometry(QtCore.QRect(130, 20, 87, 52))
+		self.layoutWidget_2.setGeometry(QtCore.QRect(110, 40, 87, 52))
 		self.layoutWidget_2.setObjectName("layoutWidget_2")
 		self.verticalLayout = QtGui.QVBoxLayout(self.layoutWidget_2)
 		self.verticalLayout.setContentsMargins(0, 0, 0, 0)
@@ -231,11 +239,11 @@ class CreatePvcPipeNpsGuiClass(QtGui.QDialog):
 		self.label_2 = QtGui.QLabel(self.layoutWidget_2)
 		self.label_2.setObjectName("label_2")
 		self.verticalLayout.addWidget(self.label_2)
-		self.comboBoxScheduler = QtGui.QComboBox(self.layoutWidget_2)
-		self.comboBoxScheduler.setObjectName("comboBoxScheduler")
-		self.verticalLayout.addWidget(self.comboBoxScheduler)
+		self.comboBoxSchedule = QtGui.QComboBox(self.layoutWidget_2)
+		self.comboBoxSchedule.setObjectName("comboBoxSchedule")
+		self.verticalLayout.addWidget(self.comboBoxSchedule)
 		self.layoutWidget_3 = QtGui.QWidget(Dialog)
-		self.layoutWidget_3.setGeometry(QtCore.QRect(230, 20, 81, 52))
+		self.layoutWidget_3.setGeometry(QtCore.QRect(210, 40, 81, 52))
 		self.layoutWidget_3.setObjectName("layoutWidget_3")
 		self.verticalLayout_3 = QtGui.QVBoxLayout(self.layoutWidget_3)
 		self.verticalLayout_3.setContentsMargins(0, 0, 0, 0)
@@ -243,27 +251,32 @@ class CreatePvcPipeNpsGuiClass(QtGui.QDialog):
 		self.label_3 = QtGui.QLabel(self.layoutWidget_3)
 		self.label_3.setObjectName("label_3")
 		self.verticalLayout_3.addWidget(self.label_3)
-		self.lineEdit = QtGui.QLineEdit(self.layoutWidget_3)
-		self.lineEdit.setObjectName("lineEdit")
-		self.verticalLayout_3.addWidget(self.lineEdit)
-		
+		self.lineEditLength = QtGui.QLineEdit(self.layoutWidget_3)
+		self.lineEditLength.setObjectName("lineEditLength")
+		self.verticalLayout_3.addWidget(self.lineEditLength)
+		self.checkBoxCreateSolid = QtGui.QCheckBox(Dialog)
+		self.checkBoxCreateSolid.setGeometry(QtCore.QRect(10, 10, 171, 22))
+		self.checkBoxCreateSolid.setChecked(True)
+		self.checkBoxCreateSolid.setObjectName("checkBoxCreateSolid")
+
 		self.retranslateUi(Dialog)
 		QtCore.QObject.connect(self.buttonBox, QtCore.SIGNAL("accepted()"), Dialog.accept)
 		QtCore.QObject.connect(self.buttonBox, QtCore.SIGNAL("rejected()"), Dialog.reject)
 		QtCore.QMetaObject.connectSlotsByName(Dialog)
 
 	def retranslateUi(self, Dialog):
-		Dialog.setWindowTitle(QtGui.QApplication.translate("Dialog", "Dialog", None, QtGui.QApplication.UnicodeUTF8))
+		Dialog.setWindowTitle(QtGui.QApplication.translate("Dialog", "Create PVC", None, QtGui.QApplication.UnicodeUTF8))
 		self.label.setText(QtGui.QApplication.translate("Dialog", "Size:", None, QtGui.QApplication.UnicodeUTF8))
-		self.label_2.setText(QtGui.QApplication.translate("Dialog", "Scheduler:", None, QtGui.QApplication.UnicodeUTF8))
+		self.label_2.setText(QtGui.QApplication.translate("Dialog", "Schedule:", None, QtGui.QApplication.UnicodeUTF8))
 		self.label_3.setText(QtGui.QApplication.translate("Dialog", "Length:", None, QtGui.QApplication.UnicodeUTF8))
-		self.lineEdit.setText(QtGui.QApplication.translate("Dialog", "1ft", None, QtGui.QApplication.UnicodeUTF8))
+		self.lineEditLength.setText(QtGui.QApplication.translate("Dialog", "1ft", None, QtGui.QApplication.UnicodeUTF8))
+		self.checkBoxCreateSolid.setText(QtGui.QApplication.translate("Dialog", "Create Solid", None, QtGui.QApplication.UnicodeUTF8))
 
 	def initSizes(self):
 		# Get all possible sizes.
 		scheds = PipeFromTable.getValuesInColumn(NPS_SCHEDULE_COLUMN_INDEX)
 		for sched in scheds:
-			self.comboBoxScheduler.addItem(str(sched))
+			self.comboBoxSchedule.addItem(str(sched))
 		names = PipeFromTable.getValuesInColumn(NPS_NAME_COLUMN_INDEX)
 		for name in names:
 			self.comboBoxName.addItem(name)
@@ -271,18 +284,48 @@ class CreatePvcPipeNpsGuiClass(QtGui.QDialog):
 	def accept(self):
 		# Get suitable row from the the table.
 		name = self.comboBoxName.currentText()
-		sched = int(self.comboBoxScheduler.currentText())
-		length = tu("1 ft")
+		sched = int(self.comboBoxSchedule.currentText())
+		length = tu(self.lineEditLength.text())
+		createSolid = self.checkBoxCreateSolid.isChecked()
 		row = PipeFromTable.selectRow(name, sched)
 		if row is not None:
 			pipe = PipeFromTable(document)
-			pipe.create(name, sched, length,False)
+			pipe.create(name, sched, length, createSolid)
+			document.recompute()
+			# Save user input for the next run.
+			self.saveInput()
 		else:
 			print("Dimiensions not found")
 		# Call parent class.
-		document.recompute()
-		super(CreatePvcPipeNpsGuiClass, self).accept()
-
+		super(PipeGui, self).accept()
+	def selectComboBoxText(self, cb, text):
+		if text is not None:
+			index = cb.findText(text, QtCore.Qt.MatchFixedString)
+			if index >= 0:
+				cb.setCurrentIndex(index)
+				return index
+		return -1
+	def saveInput(self):
+		"""Store user input for the next run."""
+		settings = QtCore.QSettings(PipeGui.QSETTINGS_APPLICATION, PipeGui.QSETTINGS_NAME)
+		check = self.checkBoxCreateSolid.checkState()
+		settings.setValue("checkBoxCreateSolid", int(check))
+		settings.setValue("comboBoxName", self.comboBoxName.currentText())
+		settings.setValue("comboBoxSchedule", self.comboBoxSchedule.currentText())
+		settings.setValue("lineEditLength", self.lineEditLength.text())
+		settings.sync()
+	def restoreInput(self):
+		settings = QtCore.QSettings(PipeGui.QSETTINGS_APPLICATION, PipeGui.QSETTINGS_NAME)
+		checkState = QtCore.Qt.CheckState(int(settings.value("checkBoxCreateSolid")))
+		self.checkBoxCreateSolid.setCheckState(checkState)
+		# Restore the selection of the comboBoxName.
+		text = settings.value("comboBoxName")
+		self.selectComboBoxText(self.comboBoxName, text)
+		text = settings.value("comboBoxSchedule")
+		self.selectComboBoxText(self.comboBoxSchedule, text)
+		text = settings.value("lineEditLength")
+		if text is not None:
+			self.lineEditLength.setText(text)
 # Show Dialog
-form = CreatePvcPipeNpsGuiClass()
+form = PipeGui()
 
