@@ -1,0 +1,411 @@
+# -*- coding: utf-8 -*-
+# Author: Ruslan Krenzler.
+# Date: 16 December 2017
+# Create a elbow-fitting.
+# Version 0.3
+
+import math
+
+from PySide import QtCore, QtGui
+import FreeCAD
+import Spreadsheet
+import Sketcher
+import Part
+
+
+document = App.activeDocument()
+tu = FreeCAD.Units.parseQuantity
+
+# The value RELATIVE_EPSILON is used to slightly change the size of a subtracted part
+# to prevent problems with boolean operations.
+# This value does not change the appearance of part and can be large.
+# If the original value is L then we often use the value L*(1+RELATIVE_EPSILON) instead.
+# The relative deviation is then (L*(1+RELATIVE_EPSILON)-L)/L = RELATIVE_EPSILON.
+# That is why the constant has "relative" in its name.
+RELATIVE_EPSILON = 0.1
+
+NPS_NAME_COLUMN_INDEX = 0
+NPS_SCHEDULE_COLUMN_INDEX = 1
+NPS_OUTER_DIAMETER_COLUMN_INDEX = 2
+NPS_INNER_DIAMETER_COLUMN_INDEX = 3
+
+# Source: http://opensourceecology.org/wiki/PVC_Pipe
+
+NPS_PVC_TABLE = [
+	['1/8"', 40, 0.405,0.249,0.068,0.051,810],
+	['1/4"', 40, 0.540,0.344,0.088, 0.086, 780],
+	['3/8"', 40, 0.675, 0.473, 0.091, 0.115, 620],
+	['1/2"', 40, 0.840, 0.602, 0.109, 0.170, 600],
+	['3/4"', 40, 1.050, 0.804, 0.113, 0.226, 480],
+	['1"', 40, 1.315, 1.029, 0.133, 0.333, 450],
+	['1-1/4"', 40, 1.660, 1.360, 0.140, 0.450, 370],
+	['1-1/2"', 40, 1.900, 1.590, 0.145, 0.537, 330],
+	['2"', 40, 2.375, 2.047, 0.154, 0.720, 280],
+	['2-1/2"', 40, 2.875, 2.445, 0.203, 1.136, 300],
+	['3"', 40, 3.500, 3.042, 0.216, 1.488, 260],
+	['3-1/2"', 40, 4.000, 3.521, 0.226, 1.789, 240],
+	['4"', 40, 4.500, 3.998, 0.237, 2.118, 220],
+	['5"', 40, 5.563, 5.016, 0.258, 2.874, 190],
+	['6"', 40, 6.625, 6.031, 0.280, 3.733, 180],
+	['8"', 40, 8.625, 7.942, 0.322, 5.619, 160],
+	['10"', 40, 10.750, 9.976, 0.365, 7.966, 140],
+	['12"', 40, 12.750, 11.889, 0.406, 10.534, 130],
+	['1/8"',80, .405, .195, 0.095, 0.063, 1230],
+	['1/4"',80, .540, .282, 0.119, 0.105, 1130],
+	['3/8"',80, .675, .403, 0.126, 0.146, 920],
+	['1/2"',80, .840, .526, 0.147, 0.213, 850],
+	['3/4"',80, 1.050, .722, 0.154, 0.289, 690],
+	['1"',80, 1.315, .936, 0.179, 0.424, 630],
+	['1-1/4"',80, 1.660, 1.255, 0.191, 0.586, 520],
+	['1-1/2"',80, 1.900, 1.476, 0.200, 0.711, 470],
+	['2"',80, 2.375,1.913, 0.218, 0.984, 400],
+	['2-1/2"',80, 2.875, 2.290, 0.276, 1.500, 420],
+	['3"',80, 3.500, 2.864, 0.300, 2.010, 370],
+	['3-1/2"',80, 4.000, 3.326, 0.318, 2.452, 350],
+	['4"',80, 4.500, 3.786, 0.337, 2.938, 320],
+	['5"',80, 5.563, 4.768, 0.375, 4.078, 290],
+	['6"',80, 6.625, 5.709, 0.432, 5.610, 280],
+	['8"',80, 8.625, 7.565, 0.500, 8.522, 250],
+	['10"',80, 10.750, 9.493, 0.593, 12.635, 230],
+	['12"',80 ,12.750, 11.294, 0.687, 17.384, 230]]
+
+TEE_PART_NAME_COLUMN_INDEX = 0
+TEE_PIPE_SIZE_NAME_COLUMN_INDEX = 1
+TEE_SCHEDULE_COLUMN_INDEX = 2
+TEE_G_COLUMN_INDEX = 3
+TEE_G1_COLUMN_INDEX = 4
+TEE_H_COLUMN_INDEX = 5
+TEE_H1_COLUMN_INDEX = 6
+TEE_L_COLUMN_INDEX = 7
+TEE_M_COLUMN_INDEX = 8
+TEE_WEIGHT_COLUMN_INDEX = 9 # LBS, Not used now
+
+# The headers are used by the GUI.
+ELBOW_90_HEADERS =["Part Number", "Size", "Schedule", "G", "H","M"]
+ELBOW_90_PART_NAME_COLUMN_INDEX = 0
+ELBOW_90_PIPE_SIZE_NAME_COLUMN_INDEX = 1
+ELBOW_90_SCHEDULE_COLUNN_INDEX = 2
+ELBOW_90_G_COLUMN_INDEX = 3
+ELBOW_90_H_COLUMN_INDEX = 4
+ELBOW_90_M_COLUMN_INDEX = 5
+ELBOW_90_HEADERS =["Part Number", "Size", "Schedule", "G", "H","M"]
+# The dimensions are from https://www.aetnaplastics.com/
+ELBOW_90_TABLE=[['406-003','3/8"' , 40, 3/8.0, 1+1/8.0, 7/8.0],
+['406-005','1/2"', 40, 1/2.0, 1+1/4.0, 1+1/8.0],
+['406-007', '3/4"', 40, 9.0/16, 1+1.0/2,1+11/32.0],
+['406-010', '1"', 40, 11/16.0, 1+13/16.0, 1+5/8.0],
+['406-012', '1-1/4"', 40, 31/32.0, 2-5/32.0, 2],
+['406-015','1-1/2"', 40, 1+1/16.0, 2+11/32.0,2+1/4.0],
+['406-020', '2"', 40, 1+5/160, 2-11/16.0, 2+3/4.0],
+['406-025','2-1/2"', 40, 1+1/2.0, 3+1/4.0, 3+11/32.0],
+['406-030', '3"', 40, 1+27/32.0, 3+23/32.0, 4],
+['406-040', '4"', 40, 2+13/32.0, 4+13/32.0, 5+1/32.0],
+#['406-045F', '4-1/2"', 40, 8+5/8.0, 6+1/8.0, 5+7/16.0], # Impossible values. G>H.
+['406-050', '5"', 40, 3+1/16.0, 6+1/8.0, 6+5/32.0],
+['406-060','6"', 40, 3+17/32.0, 6+9/16.0, 7+9/32.0],
+['406-080', '8"', 40, 4+13/32.0, 8+7/16.0, 9+3/8.0],
+['406-100', '10"', 40, 5+13/16.0, 10+27/32.0, 11+19/32.0],
+['406-100F', '10"', 40, 9+13/16.0, 15+1/16.0, 11+1/2.0],
+['406-120', '12"', 40, 7+1/16.0, 13+9/16.0, 14+1/4.0],
+['406-120F', '12"', 40, 11+3/16.0, 17+7/16.0, 13+9/16.0]]
+# For other entries, the pipe dimensions are missing.
+#['406-140', '14"', 7-1/2 14-1/2 15-11/16], 
+#['406-140F', '14"', 13-3/16 20-3/16 14-7/8],
+#['406-160F', '16"', 15-1/4 23-1/4 17],
+#['406-180F', '18"', 17-5/16 26-5/16 19-1/8],
+#['406-200F', '20"', 19-13/16 29-13/16 22-1/16],
+#['406-240F', '24"', 23-7/16 35-7/16 25-3/8 216.00]]
+
+class Error(Exception):
+    """Base class for exceptions in this module."""
+    pass
+
+class UnplausibleDimensions(Error):
+    """Exception raised when dimensions are unplausible. For example if
+	outer diameter is larger than the iner one.
+
+    Attributes:
+        message -- explanation of the error
+    """
+
+    def __init__(self, message):
+        self.message = message
+
+
+class Elbow:
+	def __init__(self, document):
+		self.document = document
+		# Set default values.
+		self.alpha = tu("60 deg")
+		self.outerD = tu("3 in")
+		self.socketD = tu("2 in")
+		self.innerD = tu("1 in")
+		self.len1 = tu("4 in")
+		self.len2 = tu("5 in")
+
+	@staticmethod
+	def toSolid(document, part, name):
+		"""Convert object to a solid.
+			Basically those are commands, which FreeCAD runs when user converts a part to a solid.
+		"""
+		s = part.Shape.Faces
+		s = Part.Solid(Part.Shell(s))
+		o = document.addObject("Part::Feature", name)
+		o.Label=name
+		o.Shape=s
+		return o
+	@staticmethod
+	def NestedObjects(group):
+		res = []
+		if group.OutList == []:
+			res.append(group)
+		else:
+			# Append children first.
+			for o in group.OutList:
+				res += Tee.NestedObjects(o)
+			res.append(group)
+		return res
+
+	def checkDimensions(self):
+		if not ( (self.alpha > tu("0 deg")) and (self.alpha <= tu("180 deg")) ):
+			raise UnplausibleDimensions("alpha %s must be within of range (0,180]"%self.alpha)
+		if not ( self.innerD > 0):
+			raise UnplausibleDimensions("Inner Diameter %s must be positive"%self.innerD)
+		if not ( self.socketD >= self.innerD):
+			raise UnplausibleDimensions("Sockeet Diameter %s must be greater than or equal to inner Diameter=%s"%(self.socketD, self.innerD))
+		if not ( self.outerD > self.sockedD):
+			raise UnplausibleDimensions("Outer Diameter %s must be greater than socket Diameter =%s"%(self.outerD, self.socketD))
+		if not ( self.len1 > 0):
+			raise UnplausibleDimensions("Length len1=%s must be positive"%self.len1)
+		if not ( self.len2 > 0):
+			raise UnplausibleDimensions("Length len2=%s must be positive"%self.len2)
+			
+	def createElbowCylinder(self, group, r_cyl, r_bent, alpha, len1, len2):
+		"""Create a cylinder with a radius r_cyl with a base on X-Y plane
+		and bent it by angle alpha along radius r_bent. Add streight cylinders at the ends
+
+		put all new created objects to a group.
+		This should simplify the cleaning up of the intermediate parts.
+	
+		:param r_cyl: radius of the cylinder in Base.Quantity
+		:param r_bent: radius of the path in Base.Quantity
+		:param alpha: in Base.Quantity
+		:param len1: length of the streight part 1
+		:param len2: length of the streight part 2
+		"""
+		base_sketch = self.document.addObject('Sketcher::SketchObject','BaseSketch')
+		base_sketch.Placement = App.Placement(App.Vector(0.000000,0.000000,0.000000),App.Rotation(0.000000,0.000000,0.000000,1.000000))
+
+		# When adding a radius, do not forget to convert the units.
+		base_sketch.addGeometry(Part.Circle(App.Vector(0.000000,0.000000,0),App.Vector(0,0,1),r_cyl),False)
+
+		# Add sweeping part into X-Z plane.
+		path_sketch = self.document.addObject('Sketcher::SketchObject','PathSketch')
+		path_sketch.Placement = App.Placement(App.Vector(0.000000,0.000000,0.000000),App.Rotation(-0.707107,0.000000,0.000000,-0.707107))
+		# Note the pskecth is rotatet, therefore y and z coordinates are exchanged (? is it still true)
+		# Add a line into to the bottom direction (negative Z).
+		line1 = Part.Line(App.Vector(0.000000,0.000000,0),App.Vector(-0.000000,-len1,0))
+		path_sketch.addGeometry(line1, False)
+
+		# Add the arc part.
+		start = (tu("pi rad") - alpha).getValueAs("rad")
+		stop = tu("pi rad").getValueAs("rad")
+		arc = Part.ArcOfCircle(Part.Circle(App.Vector(r_bent,0,0),App.Vector(0,0,1),r_bent),start, stop)
+		path_sketch.addGeometry(arc,False)
+
+		# Find coordinates of the right point of the arc.
+		x1 = (1-math.cos(alpha.getValueAs("rad")))*r_bent
+		z1 = math.sin(alpha.getValueAs("rad"))*r_bent
+
+		x2 = x1 + math.cos((tu("pi/2 rad")-alpha).getValueAs("rad"))*len2
+		z2 = z1 + math.sin((tu("pi/2 rad")-alpha).getValueAs("rad"))*len2
+		# Draw a streight line for the right pipe.
+		line2 = Part.Line(App.Vector(x1,z1,0),App.Vector(x2,z2,0))
+		line2_geometry = path_sketch.addGeometry(line2,False)
+		# Sweep the parts.
+		sweep = document.addObject('Part::Sweep','Sweep')
+		sweep.Sections=[base_sketch, ]
+		sweep.Spine=(path_sketch,["Edge1", "Edge2", "Edge3"])
+		sweep.Solid=True
+		sweep.Frenet=False # Is it necessary?
+		# Add all the objects to the group.
+		group.addObject(base_sketch)
+		group.addObject(path_sketch,)
+		group.addObject(sweep)
+		return sweep
+		
+	def createElbowPart(self, group):
+		# Create a ellbow pipe as a difference of two cylinders
+		outer_sweep = self.createElbowCylinder(group, self.outerD/2, self.outerD/2, self.alpha, self.en1, self.len2)
+		# Make the inner cylinder a littlebit longer, to prevent nummerical errors
+		# wenn calculating the difference.
+		inner_sweep = Elbow.createElbowCylinder(document, group, self.innerD/2, self.outerD/2, self.alpha, 
+				self.len1*(1+RELATIVE_EPSILON), self.len2)*(1+RELATIVE_EPSILON))
+		bent_cut = document.addObject("Part::Cut","BentCut")
+		bent_cut.Base = outer_sweep
+		bent_cut.Tool = inner_sweep
+		group.addObject(bent_cut)
+		return bent_cut
+		
+	def create(self, convertToSolid):
+		self.checkDimensions()
+		"""Create elbow."""
+		# Create new group to put all the temporal data.
+		group = self.document.addObject("App::DocumentObjectGroup", "elbow group")
+		# Create the bent part.
+		bent_part = self.createElbowPart(group)
+		# Remove cyliders from both ends for sockets
+		inner_cylinder1 = document.addObject("Part::Cylinder","InnerCylinder1")
+		inner_cylinder1.Radius = self.socketD/2
+		inner_cylinder1.Height = self.len1*(1+RELATIVE_EPSILON)
+		inner_cylinder1.Placement.Base = App.Vector(0,0, -inner_cylinder1.Height)
+
+		inner_cylinder2 = document.addObject("Part::Cylinder","InnerCylinder2")
+		inner_cylinder2.Radius = self.socketD/2
+		inner_cylinder2.Height = self.len2*(1+RELATIVE_EPSILON)
+		inner_cylinder2.Placement.Base = App.Vector(0,0, -inner_cylinder2.Height)
+		x = (1-math.cos(self.alpha.getValueAs("rad"))) *self.outerD/2
+		z = math.sin(self.alpha.getValueAs("rad"))*self.outerD/2
+		inner_cylinder2.Placement = App.Placement(App.Vector(x,0,z),App.Rotation(App.Vector(0,1,0),self.alpha))
+		cut1 = self.document.addObject("Part::Cut","PipeCut1") 
+		cut1.Base = bent_part
+		cut1.Tool = inner_cylinder1
+		cut2 = self.document.addObject("Part::Cut","PipeCut2") 
+		cut2.Base = cut1
+		cut2.Tool = inner_cylinder2
+		if convertToSolid:
+			# Before making a solid, recompute documents. Otherwise there will be
+			#    s = Part.Solid(Part.Shell(s))
+			#    <class 'Part.OCCError'>: Shape is null
+			# exception.
+			document.recompute()
+			# Now convert all parts to solid, and remove intermediate data.
+			solid = self.toSolid(document, elbow, "elbow (solid)")
+			# Remove previous (intermediate parts).
+			parts = elbow.NestedObjects(tee)
+			# Document.removeObjects can remove multple objects, when we use
+			# parts directly. To prevent exceptions with deleted objects,
+			# use the name list instead.
+			names_to_remove = []
+			for part in parts:
+				if part.Name not in names_to_remove:
+					names_to_remove.append(part.Name)
+			for name in names_to_remove:
+				print("Deleting temporary objects %s."%name)
+				document.removeObject(name)
+			return solid
+		return elbow
+
+class GuiElbow90(QtGui.QDialog):
+	QSETTINGS_APPLICATION = "OSE piping freecad macros"
+	QSETTINGS_NAME = "tee user input"
+	"""Return index of the row in the NPC_PVC library.
+		Return -1 if nothing is selected.
+	"""
+	def __init__(self):
+		super(GuiTee, self).__init__()
+		self.initUi()
+	def initUi(self): 
+		Dialog = self # Added 
+		self.result = -1 
+		self.setupUi(self)
+		# Fill table with dimensions. 
+		self.initTable()
+
+		# Restore previous user input. Ignore exceptions to prevent this part
+		# part of the code to prevent GUI from starting, once settings are broken.
+		try:
+			self.restoreInput()
+		except Exception as e:
+			print ("Could not restore old user input!")
+			print(e)
+		self.show()
+
+# The following lines are from QtDesigner .ui-file processed by pyside-uic
+# pyside-uic --indent=0 ycreate-tee.ui -o tmp.py
+	def setupUi(self, Dialog):
+	# This code is from tmp.py.
+		Dialog.setObjectName("Dialog")
+		Dialog.resize(619, 277)
+		self.buttonBox = QtGui.QDialogButtonBox(Dialog)
+		self.buttonBox.setGeometry(QtCore.QRect(310, 240, 301, 32))
+		self.buttonBox.setOrientation(QtCore.Qt.Horizontal)
+		self.buttonBox.setStandardButtons(QtGui.QDialogButtonBox.Cancel|QtGui.QDialogButtonBox.Ok)
+		self.buttonBox.setObjectName("buttonBox")
+		self.tableViewParts = QtGui.QTableView(Dialog)
+		self.tableViewParts.setGeometry(QtCore.QRect(10, 40, 601, 192))
+		self.tableViewParts.setSelectionMode(QtGui.QAbstractItemView.SingleSelection)
+		self.tableViewParts.setSelectionBehavior(QtGui.QAbstractItemView.SelectRows)
+		self.tableViewParts.setObjectName("tableViewParts")
+		self.checkBoxCreateSolid = QtGui.QCheckBox(Dialog)
+		self.checkBoxCreateSolid.setGeometry(QtCore.QRect(10, 10, 171, 22))
+		self.checkBoxCreateSolid.setChecked(True)
+		self.checkBoxCreateSolid.setObjectName("checkBoxCreateSolid")
+
+		self.retranslateUi(Dialog)
+		QtCore.QObject.connect(self.buttonBox, QtCore.SIGNAL("accepted()"), Dialog.accept)
+		QtCore.QObject.connect(self.buttonBox, QtCore.SIGNAL("rejected()"), Dialog.reject)
+		QtCore.QMetaObject.connectSlotsByName(Dialog)
+
+	def retranslateUi(self, Dialog):
+		Dialog.setWindowTitle(QtGui.QApplication.translate("Dialog", "Create Tee", None, QtGui.QApplication.UnicodeUTF8))
+		self.checkBoxCreateSolid.setText(QtGui.QApplication.translate("Dialog", "Create Solid", None, QtGui.QApplication.UnicodeUTF8))
+
+	def initTable(self):
+		self.model = PartTableModel()
+		self.tableViewParts.setModel(model)
+		
+	def getSelectedPartName(self):
+		sel = form.tableViewParts.selectionModel()
+		if sel.isSelected:
+			if len(sel.selectedRows())> 0:
+				rowIndex = sel.selectedRows()[0].row()
+				return self.model.getPartName(rowIndex)
+		return None
+
+	def selectPartByName(self, partName):
+		"""Select first row with a part with a name partName."""
+		if partName is not None:
+			row_i = self.model.getPartRowIndex(partName)
+			if row_i >= 0:
+				self.tableViewParts.selectRow(row_i)
+
+	def accept(self):
+		"""User clicked OK"""
+		# Get suitable row from the the table.
+		partName = self.getSelectedPartName()
+		createSolid = self.checkBoxCreateSolid.isChecked()
+		if partName is not None:
+			tee = TeeFromTable(document)
+			tee.create(partName, createSolid)
+			document.recompute()
+			# Save user input for the next dialog call.
+			self.saveInput()
+			# Call parent class.
+			super(GuiTee, self).accept()
+		else:
+			msgBox = QtGui.QMessageBox()
+			msgBox.setText("Select part")
+			msgBox.exec_()
+		
+	def saveInput(self):
+		"""Store user input for the next run."""
+		settings = QtCore.QSettings(GuiTee.QSETTINGS_APPLICATION, GuiTee.QSETTINGS_NAME)
+		check = self.checkBoxCreateSolid.checkState()
+		settings.setValue("checkBoxCreateSolid", int(check))
+		settings.setValue("LastSelectedPartName", self.getSelectedPartName())
+		settings.sync()
+	def restoreInput(self):
+		settings = QtCore.QSettings(GuiTee.QSETTINGS_APPLICATION, GuiTee.QSETTINGS_NAME)
+		checkState = QtCore.Qt.CheckState(int(settings.value("checkBoxCreateSolid")))
+		self.checkBoxCreateSolid.setCheckState(checkState)
+		self.selectPartByName(settings.value("LastSelectedPartName"))
+
+
+#TestTable()
+#form = GuiTee()
+
+elbow = Elbow(document)
+elbow.create()
+document.recompute()
+
