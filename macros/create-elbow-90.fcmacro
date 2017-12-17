@@ -173,7 +173,7 @@ class Elbow:
 			raise UnplausibleDimensions("Inner Diameter %s must be positive"%self.innerD)
 		if not ( self.socketD >= self.innerD):
 			raise UnplausibleDimensions("Sockeet Diameter %s must be greater than or equal to inner Diameter=%s"%(self.socketD, self.innerD))
-		if not ( self.outerD > self.sockedD):
+		if not ( self.outerD > self.socketD):
 			raise UnplausibleDimensions("Outer Diameter %s must be greater than socket Diameter =%s"%(self.outerD, self.socketD))
 		if not ( self.len1 > 0):
 			raise UnplausibleDimensions("Length len1=%s must be positive"%self.len1)
@@ -236,11 +236,11 @@ class Elbow:
 		
 	def createElbowPart(self, group):
 		# Create a ellbow pipe as a difference of two cylinders
-		outer_sweep = self.createElbowCylinder(group, self.outerD/2, self.outerD/2, self.alpha, self.en1, self.len2)
+		outer_sweep = self.createElbowCylinder(group, self.outerD/2, self.outerD/2, self.alpha, self.len1, self.len2)
 		# Make the inner cylinder a littlebit longer, to prevent nummerical errors
 		# wenn calculating the difference.
-		inner_sweep = Elbow.createElbowCylinder(document, group, self.innerD/2, self.outerD/2, self.alpha, 
-				self.len1*(1+RELATIVE_EPSILON), self.len2)*(1+RELATIVE_EPSILON))
+		inner_sweep = self.createElbowCylinder(group, self.innerD/2, self.outerD/2, self.alpha, 
+				self.len1*(1+RELATIVE_EPSILON), self.len2*(1+RELATIVE_EPSILON))
 		bent_cut = document.addObject("Part::Cut","BentCut")
 		bent_cut.Base = outer_sweep
 		bent_cut.Tool = inner_sweep
@@ -270,9 +270,10 @@ class Elbow:
 		cut1 = self.document.addObject("Part::Cut","PipeCut1") 
 		cut1.Base = bent_part
 		cut1.Tool = inner_cylinder1
-		cut2 = self.document.addObject("Part::Cut","PipeCut2") 
-		cut2.Base = cut1
-		cut2.Tool = inner_cylinder2
+		elbow = self.document.addObject("Part::Cut","elbow") 
+		elbow.Base = cut1
+		elbow.Tool = inner_cylinder2
+		group.addObject(elbow)
 		if convertToSolid:
 			# Before making a solid, recompute documents. Otherwise there will be
 			#    s = Part.Solid(Part.Shell(s))
@@ -282,7 +283,7 @@ class Elbow:
 			# Now convert all parts to solid, and remove intermediate data.
 			solid = self.toSolid(document, elbow, "elbow (solid)")
 			# Remove previous (intermediate parts).
-			parts = elbow.NestedObjects(tee)
+			parts = Elbow.NestedObjects(group)
 			# Document.removeObjects can remove multple objects, when we use
 			# parts directly. To prevent exceptions with deleted objects,
 			# use the name list instead.
@@ -295,6 +296,66 @@ class Elbow:
 				document.removeObject(name)
 			return solid
 		return elbow
+
+class Elbow90:
+	"""Create a symetrical 90°elbow"""
+	def __init__(self, document):
+		self.document = document
+		# setup some test values
+		self.G = tu("2 in")
+		self.H = tu("4 in")
+		self.M = tu("3 in")
+		self.socketD = tu("2 in")
+		self.innerD = tu("1 in")
+	def create(self, convertToSolid = True):
+		elbow = Elbow(self.document)
+		elbow.alpha = tu("90 deg")
+		elbow.outerD = self.M
+		elbow.socketD = self.socketD
+		elbow.innerD = self.innerD
+		elbow.len1 = self.H - self.G
+		elbow.len2 =elbow.len1
+		return elbow.create(convertToSolid)
+# Create a part with dimensions from NPS_PVC_TABLE and TEE_TABLE.
+class Elbow90FromTable:
+	def __init__ (self, document):
+		self.document = document
+	@staticmethod
+	def findPipeDimensions(npsPipeSizeName, schedule):
+		"""Returns single row or None"""
+		for row in NPS_PVC_TABLE:
+			if row[NPS_NAME_COLUMN_INDEX]==npsPipeSizeName	and row[NPS_SCHEDULE_COLUNN_INDEX]==schedule:
+				return row
+		return None
+
+	@staticmethod
+	def findPart(partName):
+		for row in ELBOW_90_TABLE:
+			if row[ELBOW_90_PART_NAME_COLUMN_INDEX]==partName:
+				return row
+		return row
+
+	def create(self, partName, convertToSolid = True):
+		elbow90 = Elbow90(self.document)
+		row = Elbow90FromTable.findPart(partName)
+		if row is None:
+			print("Part not found")
+			return
+		elbow90.G = tu("%f in"%row[ELBOW_90_G_COLUMN_INDEX])
+		elbow90.H = tu("%f in"%row[ELBOW_90_H_COLUMN_INDEX])
+		elbow90.M = tu("%f in"%row[ELBOW_90_M_COLUMN_INDEX])
+
+		# get pipe dimensions
+		pipe_dims =TeeFromTable.findPipeDimensions(row[TEE_PIPE_SIZE_NAME_COLUMN_INDEX],row[TEE_SCHEDULE_COLUMN_INDEX])
+
+		if pipe_dims is None:
+			print("No pipe dimensions found")
+			return
+
+		elbow90.socketD = tu("%f in"%pipe_dims[NPS_OUTER_DIAMETER_COLUMN_INDEX])
+		elbow90.innerD = tu("%f in"%pipe_dims[NPS_INNER_DIAMETER_COLUMN_INDEX])
+		return elbow90.create(convertToSolid)
+
 
 class GuiElbow90(QtGui.QDialog):
 	QSETTINGS_APPLICATION = "OSE piping freecad macros"
@@ -405,7 +466,25 @@ class GuiElbow90(QtGui.QDialog):
 #TestTable()
 #form = GuiTee()
 
-elbow = Elbow(document)
-elbow.create()
+#elbow = Elbow(document)
+#elbow.create(True)
+
+def Test90Talbe():
+	elbow = Elbow90FromTable(document)
+	for row in ELBOW_90_TABLE:
+		partName = row[ELBOW_90_PART_NAME_COLUMN_INDEX]
+		print("Creating part %s",partName)
+		elbow.create(partName, True)
+		document.recompute()
+		
+
+#TestTable()
+#form = GuiTee()
+
+#elbow = Elbow(document)
+#elbow.create()
+Test90Talbe()
+
+
 document.recompute()
 
