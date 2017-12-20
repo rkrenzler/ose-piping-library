@@ -385,7 +385,7 @@ class GuiTee(QtGui.QDialog):
 
 	def initTable(self):
 		self.model = PartTableModel()
-		self.tableViewParts.setModel(model)
+		self.tableViewParts.setModel(self.model)
 		
 	def getSelectedPartName(self):
 		sel = form.tableViewParts.selectionModel()
