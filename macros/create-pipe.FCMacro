@@ -282,22 +282,32 @@ class PipeGui(QtGui.QDialog):
 			self.comboBoxName.addItem(name)
 	
 	def accept(self):
-		# Get suitable row from the the table.
-		name = self.comboBoxName.currentText()
-		sched = int(self.comboBoxSchedule.currentText())
-		length = tu(self.lineEditLength.text())
-		createSolid = self.checkBoxCreateSolid.isChecked()
-		row = PipeFromTable.selectRow(name, sched)
-		if row is not None:
-			pipe = PipeFromTable(document)
-			pipe.create(name, sched, length, createSolid)
-			document.recompute()
-			# Save user input for the next run.
-			self.saveInput()
+		# Update active document. Create a pipe according to the user input.
+		# If there is none, show a warning message.
+		document = App.activeDocument()
+		if document is not None:
+			# Get suitable row from the the table.
+			name = self.comboBoxName.currentText()
+			sched = int(self.comboBoxSchedule.currentText())
+			length = tu(self.lineEditLength.text())
+			createSolid = self.checkBoxCreateSolid.isChecked()
+			row = PipeFromTable.selectRow(name, sched)
+			if row is not None:
+				pipe = PipeFromTable(document)
+				pipe.create(name, sched, length, createSolid)
+				document.recompute()
+				# Save user input for the next run.
+				self.saveInput()
+			else:
+				print("Dimiensions not found")
+			# Call parent class.
+			super(PipeGui, self).accept()
 		else:
-			print("Dimiensions not found")
-		# Call parent class.
-		super(PipeGui, self).accept()
+			text = "I have not found any active document were I can create a pipe.\n"\
+				"Use menu File->New to create a new document first,"\
+				"then try to create the pipe again."
+			msgBox = QtGui.QMessageBox(QtGui.QMessageBox.Warning, "Creating of the pipe failed.", text)
+			msgBox.exec_()
 	def selectComboBoxText(self, cb, text):
 		if text is not None:
 			index = cb.findText(text, QtCore.Qt.MatchFixedString)
