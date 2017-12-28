@@ -128,9 +128,9 @@ class Pipe:
 			#    s = Part.Solid(Part.Shell(s))
 			#    <class 'Part.OCCError'>: Shape is null
 			# exception.
-			document.recompute()
+			self.document.recompute()
 			# Now convert all parts to solid, and remove intermediate data.
-			solid = Pipe.toSolid(document, cut, "pipe (solid)")
+			solid = Pipe.toSolid(self.document, cut, "pipe (solid)")
 			# Remove previous (intermediate parts).
 			parts = Pipe.NestedObjects(cut)
 			# Document.removeObjects can remove multple objects, when we use
@@ -142,7 +142,7 @@ class Pipe:
 					names_to_remove.append(part.Name)
 			for name in names_to_remove:
 				print("Deleting temporary objects %s."%name)
-				document.removeObject(name)
+				self.document.removeObject(name)
 			return solid
 		return cut
 
@@ -282,8 +282,8 @@ class PipeGui(QtGui.QDialog):
 			self.comboBoxName.addItem(name)
 	
 	def accept(self):
-		# Update active document. Create a pipe according to the user input.
-		# If there is none, show a warning message.
+		# Create a pipe according to the user input.
+		# Update active document.  If there is none, show a warning message and do nothing.
 		document = App.activeDocument()
 		if document is not None:
 			# Get suitable row from the the table.
@@ -304,7 +304,7 @@ class PipeGui(QtGui.QDialog):
 			super(PipeGui, self).accept()
 		else:
 			text = "I have not found any active document were I can create a pipe.\n"\
-				"Use menu File->New to create a new document first,"\
+				"Use menu File->New to create a new document first, "\
 				"then try to create the pipe again."
 			msgBox = QtGui.QMessageBox(QtGui.QMessageBox.Warning, "Creating of the pipe failed.", text)
 			msgBox.exec_()

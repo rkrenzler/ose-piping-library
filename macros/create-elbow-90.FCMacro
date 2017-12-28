@@ -211,7 +211,7 @@ class Elbow:
 		line2 = Part.Line(App.Vector(x1,z1,0),App.Vector(x2,z2,0))
 		line2_geometry = path_sketch.addGeometry(line2,False)
 		# Sweep the parts.
-		sweep = document.addObject('Part::Sweep','Sweep')
+		sweep = self.document.addObject('Part::Sweep','Sweep')
 		sweep.Sections=[base_sketch, ]
 		sweep.Spine=(path_sketch,["Edge1", "Edge2", "Edge3"])
 		sweep.Solid=True
@@ -229,7 +229,7 @@ class Elbow:
 		# wenn calculating the difference.
 		inner_sweep = self.createElbowCylinder(group, self.innerD/2, self.outerD/2, self.alpha, 
 				self.len1*(1+RELATIVE_EPSILON), self.len2*(1+RELATIVE_EPSILON))
-		bent_cut = document.addObject("Part::Cut","BentCut")
+		bent_cut = self.document.addObject("Part::Cut","BentCut")
 		bent_cut.Base = outer_sweep
 		bent_cut.Tool = inner_sweep
 		group.addObject(bent_cut)
@@ -243,12 +243,12 @@ class Elbow:
 		# Create the bent part.
 		bent_part = self.createElbowPart(group)
 		# Remove cyliders from both ends for sockets
-		inner_cylinder1 = document.addObject("Part::Cylinder","InnerCylinder1")
+		inner_cylinder1 = self.document.addObject("Part::Cylinder","InnerCylinder1")
 		inner_cylinder1.Radius = self.socketD/2
 		inner_cylinder1.Height = self.len1*(1+RELATIVE_EPSILON)
 		inner_cylinder1.Placement.Base = App.Vector(0,0, -inner_cylinder1.Height)
 
-		inner_cylinder2 = document.addObject("Part::Cylinder","InnerCylinder2")
+		inner_cylinder2 = self.document.addObject("Part::Cylinder","InnerCylinder2")
 		inner_cylinder2.Radius = self.socketD/2
 		inner_cylinder2.Height = self.len2*(1+RELATIVE_EPSILON)
 		inner_cylinder2.Placement.Base = App.Vector(0,0, -inner_cylinder2.Height)
@@ -267,9 +267,9 @@ class Elbow:
 			#    s = Part.Solid(Part.Shell(s))
 			#    <class 'Part.OCCError'>: Shape is null
 			# exception.
-			document.recompute()
+			self.document.recompute()
 			# Now convert all parts to solid, and remove intermediate data.
-			solid = self.toSolid(document, elbow, "elbow (solid)")
+			solid = self.toSolid(self.document, elbow, "elbow (solid)")
 			# Remove previous (intermediate parts).
 			parts = Elbow.NestedObjects(group)
 			# Document.removeObjects can remove multple objects, when we use
@@ -281,7 +281,7 @@ class Elbow:
 					names_to_remove.append(part.Name)
 			for name in names_to_remove:
 				print("Deleting temporary objects %s."%name)
-				document.removeObject(name)
+				self.document.removeObject(name)
 			return solid
 		return elbow
 
@@ -455,22 +455,30 @@ class GuiElbow90(QtGui.QDialog):
 
 	def accept(self):
 		"""User clicked OK"""
+		# Update active document.  If there is none, show a warning message and do nothing.
+		document = App.activeDocument()
+		if document is not None:
 		# Get suitable row from the the table.
-		partName = self.getSelectedPartName()
-		createSolid = self.checkBoxCreateSolid.isChecked()
-		if partName is not None:
-			elbow = Elbow90FromTable(document)
-			elbow.create(partName, createSolid)
-			document.recompute()
-			# Save user input for the next dialog call.
-			self.saveInput()
-			# Call parent class.
-			super(GuiElbow90, self).accept()
+			partName = self.getSelectedPartName()
+			createSolid = self.checkBoxCreateSolid.isChecked()
+			if partName is not None:
+				elbow = Elbow90FromTable(document)
+				elbow.create(partName, createSolid)
+				document.recompute()
+				# Save user input for the next dialog call.
+				self.saveInput()
+				# Call parent class.
+				super(GuiElbow90, self).accept()
+			else:
+				msgBox = QtGui.QMessageBox()
+				msgBox.setText("Select part")
+				msgBox.exec_()
 		else:
-			msgBox = QtGui.QMessageBox()
-			msgBox.setText("Select part")
+			text = "I have not found any active document were I can create an elbow.\n"\
+				"Use menu File->New to create a new document first, "\
+				"then try to create the elbow again."
+			msgBox = QtGui.QMessageBox(QtGui.QMessageBox.Warning, "Creating of the elbow failed.", text)
 			msgBox.exec_()
-		
 	def saveInput(self):
 		"""Store user input for the next run."""
 		settings = QtCore.QSettings(GuiElbow90.QSETTINGS_APPLICATION, GuiElbow90.QSETTINGS_NAME)

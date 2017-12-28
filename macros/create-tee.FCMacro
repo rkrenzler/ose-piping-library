@@ -226,9 +226,9 @@ class Tee:
 			#    s = Part.Solid(Part.Shell(s))
 			#    <class 'Part.OCCError'>: Shape is null
 			# exception.
-			document.recompute()
+			self.document.recompute()
 			# Now convert all parts to solid, and remove intermediate data.
-			solid = self.toSolid(document, tee, "tee (solid)")
+			solid = self.toSolid(self.document, tee, "tee (solid)")
 			# Remove previous (intermediate parts).
 			parts = Tee.NestedObjects(tee)
 			# Document.removeObjects can remove multple objects, when we use
@@ -240,7 +240,7 @@ class Tee:
 					names_to_remove.append(part.Name)
 			for name in names_to_remove:
 				print("Deleting temporary objects %s."%name)
-				document.removeObject(name)
+				self.document.removeObject(name)
 			return solid
 		return tee
 
@@ -404,22 +404,30 @@ class GuiTee(QtGui.QDialog):
 
 	def accept(self):
 		"""User clicked OK"""
-		# Get suitable row from the the table.
-		partName = self.getSelectedPartName()
-		createSolid = self.checkBoxCreateSolid.isChecked()
-		if partName is not None:
-			tee = TeeFromTable(document)
-			tee.create(partName, createSolid)
-			document.recompute()
-			# Save user input for the next dialog call.
-			self.saveInput()
-			# Call parent class.
-			super(GuiTee, self).accept()
+		# Update active document.  If there is none, show a warning message and do nothing.
+		document = App.activeDocument()
+		if document is not None:
+			# Get suitable row from the the table.
+			partName = self.getSelectedPartName()
+			createSolid = self.checkBoxCreateSolid.isChecked()
+			if partName is not None:
+				tee = TeeFromTable(document)
+				tee.create(partName, createSolid)
+				document.recompute()
+				# Save user input for the next dialog call.
+				self.saveInput()
+				# Call parent class.
+				super(GuiTee, self).accept()
+			else:
+				msgBox = QtGui.QMessageBox()
+				msgBox.setText("Select part")
+				msgBox.exec_()
 		else:
-			msgBox = QtGui.QMessageBox()
-			msgBox.setText("Select part")
+			text = "I have not found any active document were I can create a tee.\n"\
+				"Use menu File->New to create a new document first, "\
+				"then try to create the tee again."
+			msgBox = QtGui.QMessageBox(QtGui.QMessageBox.Warning, "Creating of the ttee failed.", text)
 			msgBox.exec_()
-		
 	def saveInput(self):
 		"""Store user input for the next run."""
 		settings = QtCore.QSettings(GuiTee.QSETTINGS_APPLICATION, GuiTee.QSETTINGS_NAME)
