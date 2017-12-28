@@ -507,6 +507,3 @@ def Test90Talbe():
 		
 
 form = GuiElbow90()
-
-document.recompute()
-

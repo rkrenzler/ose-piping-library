@@ -451,5 +451,4 @@ def TestTable():
 
 #TestTable()
 form = GuiTee()
-document.recompute()
 
