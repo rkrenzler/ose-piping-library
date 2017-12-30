@@ -5,7 +5,7 @@
 # to a python array.
 # adjust the value of input_str and of the schedule.
 
-# The data is from https://www.aetnaplastics.com.
+# The data for elbows is from https://www.aetnaplastics.com.
 
 import re
 

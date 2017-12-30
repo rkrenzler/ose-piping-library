@@ -5,6 +5,8 @@
 # Version 0.3
 
 import math
+import csv
+import os.path
 
 from PySide import QtCore, QtGui
 import FreeCAD
@@ -24,86 +26,45 @@ tu = FreeCAD.Units.parseQuantity
 # That is why the constant has "relative" in its name.
 RELATIVE_EPSILON = 0.1
 
-NPS_NAME_COLUMN_INDEX = 0
-NPS_SCHEDULE_COLUMN_INDEX = 1
-NPS_OUTER_DIAMETER_COLUMN_INDEX = 2
-NPS_INNER_DIAMETER_COLUMN_INDEX = 3
+class CsvTable:
+	""" Read elbow dimensions from a csv file"""
+	def __init__(self):
+		self.headers = []
+		self.data = []
+		self.hasValidData = False
 
-# Source: http://opensourceecology.org/wiki/PVC_Pipe
+	def load(self, filename):
+		"""Load data from a CSV file."""
+		self.hasValidData = False
+		with open(filename, "r") as csvfile:
+			csv_reader = csv.reader(csvfile, delimiter=',', quotechar='"')
+			self.headers = csv_reader.next()
+			# Fill the talble
+			self.data = []
+			for row in csv_reader:
+				self.data.append(row)
+			csvfile.close() # Should I close this file explicitely?
+			self.hasValidData = self.hasNecessaryColumns()
 
-NPS_PVC_TABLE = [
-	['1/8"', 40, 0.405,0.249,0.068,0.051,810],
-	['1/4"', 40, 0.540,0.344,0.088, 0.086, 780],
-	['3/8"', 40, 0.675, 0.473, 0.091, 0.115, 620],
-	['1/2"', 40, 0.840, 0.602, 0.109, 0.170, 600],
-	['3/4"', 40, 1.050, 0.804, 0.113, 0.226, 480],
-	['1"', 40, 1.315, 1.029, 0.133, 0.333, 450],
-	['1-1/4"', 40, 1.660, 1.360, 0.140, 0.450, 370],
-	['1-1/2"', 40, 1.900, 1.590, 0.145, 0.537, 330],
-	['2"', 40, 2.375, 2.047, 0.154, 0.720, 280],
-	['2-1/2"', 40, 2.875, 2.445, 0.203, 1.136, 300],
-	['3"', 40, 3.500, 3.042, 0.216, 1.488, 260],
-	['3-1/2"', 40, 4.000, 3.521, 0.226, 1.789, 240],
-	['4"', 40, 4.500, 3.998, 0.237, 2.118, 220],
-	['5"', 40, 5.563, 5.016, 0.258, 2.874, 190],
-	['6"', 40, 6.625, 6.031, 0.280, 3.733, 180],
-	['8"', 40, 8.625, 7.942, 0.322, 5.619, 160],
-	['10"', 40, 10.750, 9.976, 0.365, 7.966, 140],
-	['12"', 40, 12.750, 11.889, 0.406, 10.534, 130],
-	['1/8"',80, .405, .195, 0.095, 0.063, 1230],
-	['1/4"',80, .540, .282, 0.119, 0.105, 1130],
-	['3/8"',80, .675, .403, 0.126, 0.146, 920],
-	['1/2"',80, .840, .526, 0.147, 0.213, 850],
-	['3/4"',80, 1.050, .722, 0.154, 0.289, 690],
-	['1"',80, 1.315, .936, 0.179, 0.424, 630],
-	['1-1/4"',80, 1.660, 1.255, 0.191, 0.586, 520],
-	['1-1/2"',80, 1.900, 1.476, 0.200, 0.711, 470],
-	['2"',80, 2.375,1.913, 0.218, 0.984, 400],
-	['2-1/2"',80, 2.875, 2.290, 0.276, 1.500, 420],
-	['3"',80, 3.500, 2.864, 0.300, 2.010, 370],
-	['3-1/2"',80, 4.000, 3.326, 0.318, 2.452, 350],
-	['4"',80, 4.500, 3.786, 0.337, 2.938, 320],
-	['5"',80, 5.563, 4.768, 0.375, 4.078, 290],
-	['6"',80, 6.625, 5.709, 0.432, 5.610, 280],
-	['8"',80, 8.625, 7.565, 0.500, 8.522, 250],
-	['10"',80, 10.750, 9.493, 0.593, 12.635, 230],
-	['12"',80 ,12.750, 11.294, 0.687, 17.384, 230]]
+	def hasNecessaryColumns(self):
+		""" Check if the data contains all calumns required to create an elbow."""
+		return all(h in self.headers for h in ["Name", "OD", "ID", "G", "H", "M"])
 
-# The headers are used by the GUI.
-ELBOW_90_HEADERS =["Part Number", "Size", "Schedule", "G", "H","M", "Weight LBS"]
-ELBOW_90_PART_NAME_COLUMN_INDEX = 0
-ELBOW_90_PIPE_SIZE_NAME_COLUMN_INDEX = 1
-ELBOW_90_SCHEDULE_COLUMN_INDEX = 2
-ELBOW_90_G_COLUMN_INDEX = 3
-ELBOW_90_H_COLUMN_INDEX = 4
-ELBOW_90_M_COLUMN_INDEX = 5
-# The dimensions are from https://www.aetnaplastics.com/
-ELBOW_90_TABLE=[['406-003','3/8"' , 40, 3/8.0, 1+1/8.0, 7/8.0],
-['406-005','1/2"', 40, 1/2.0, 1+1/4.0, 1+1/8.0],
-['406-007', '3/4"', 40, 9.0/16, 1+1.0/2,1+11/32.0],
-['406-010', '1"', 40, 11/16.0, 1+13/16.0, 1+5/8.0],
-['406-012', '1-1/4"', 40, 31/32.0, 2-5/32.0, 2],
-['406-015','1-1/2"', 40, 1+1/16.0, 2+11/32.0,2+1/4.0],
-['406-020', '2"', 40, 1+5/160, 2-11/16.0, 2+3/4.0],
-['406-025','2-1/2"', 40, 1+1/2.0, 3+1/4.0, 3+11/32.0],
-['406-030', '3"', 40, 1+27/32.0, 3+23/32.0, 4],
-['406-040', '4"', 40, 2+13/32.0, 4+13/32.0, 5+1/32.0],
-#['406-045F', '4-1/2"', 40, 8+5/8.0, 6+1/8.0, 5+7/16.0], # Impossible values. G>H.
-['406-050', '5"', 40, 3+1/16.0, 6+1/8.0, 6+5/32.0],
-['406-060','6"', 40, 3+17/32.0, 6+9/16.0, 7+9/32.0],
-['406-080', '8"', 40, 4+13/32.0, 8+7/16.0, 9+3/8.0],
-['406-100', '10"', 40, 5+13/16.0, 10+27/32.0, 11+19/32.0],
-['406-100F', '10"', 40, 9+13/16.0, 15+1/16.0, 11+1/2.0],
-['406-120', '12"', 40, 7+1/16.0, 13+9/16.0, 14+1/4.0],
-['406-120F', '12"', 40, 11+3/16.0, 17+7/16.0, 13+9/16.0]]
-# For other entries, the pipe dimensions are missing.
-#['406-140', '14"', 7-1/2 14-1/2 15-11/16], 
-#['406-140F', '14"', 13-3/16 20-3/16 14-7/8],
-#['406-160F', '16"', 15-1/4 23-1/4 17],
-#['406-180F', '18"', 17-5/16 26-5/16 19-1/8],
-#['406-200F', '20"', 19-13/16 29-13/16 22-1/16],
-#['406-240F', '24"', 23-7/16 35-7/16 25-3/8 216.00]]
+	def findPart(self, name):
+		"""Return first first raw with the particular part name as a dictionary."""
+		# First find out the index of the column "Name".
+		ci = self.headers.index("Name")
+		# Search for the first appereance of the name in this column.
+		for row in self.data:
+			if row[ci] == name:
+				# Convert row to dicionary.
+				return dict(zip(self.headers, row))
+		return None
 
+	def getPartName(self, index):
+		"""Return part name of a row with the index *index*."""
+		ci = self.headers.index("Name")
+		return self.data[index][ci]
 class Error(Exception):
     """Base class for exceptions in this module."""
     pass
@@ -304,79 +265,65 @@ class Elbow90:
 		elbow.len1 = self.H - self.G
 		elbow.len2 =elbow.len1
 		return elbow.create(convertToSolid)
-# Create a part with dimensions from NPS_PVC_TABLE and ELBOW_90_TABLE.
+
 class Elbow90FromTable:
-	def __init__ (self, document):
+	"""Create a part with dimensions from CSV table."""
+	def __init__ (self, document, table):
 		self.document = document
-	@staticmethod
-	def findPipeDimensions(npsPipeSizeName, schedule):
-		"""Returns single row or None"""
-		for row in NPS_PVC_TABLE:
-			if row[NPS_NAME_COLUMN_INDEX]==npsPipeSizeName	and row[NPS_SCHEDULE_COLUMN_INDEX]==schedule:
-				return row
-		return None
-
-	@staticmethod
-	def findPart(partName):
-		for row in ELBOW_90_TABLE:
-			if row[ELBOW_90_PART_NAME_COLUMN_INDEX]==partName:
-				return row
-		return row
-
+		self.table = table
 	def create(self, partName, convertToSolid = True):
 		elbow90 = Elbow90(self.document)
-		row = Elbow90FromTable.findPart(partName)
+		row = self.table.findPart(partName)
 		if row is None:
 			print("Part not found")
 			return
-		elbow90.G = tu("%f in"%row[ELBOW_90_G_COLUMN_INDEX])
-		elbow90.H = tu("%f in"%row[ELBOW_90_H_COLUMN_INDEX])
-		elbow90.M = tu("%f in"%row[ELBOW_90_M_COLUMN_INDEX])
+		elbow90.G = tu(row["G"])
+		elbow90.H = tu(row["H"])
+		elbow90.M = tu(row["M"])
 
-		# get pipe dimensions
-		pipe_dims =Elbow90FromTable.findPipeDimensions(row[ELBOW_90_PIPE_SIZE_NAME_COLUMN_INDEX],row[ELBOW_90_SCHEDULE_COLUMN_INDEX])
-
-		if pipe_dims is None:
-			print("No pipe dimensions found")
-			return
-
-		elbow90.socketD = tu("%f in"%pipe_dims[NPS_OUTER_DIAMETER_COLUMN_INDEX])
-		elbow90.innerD = tu("%f in"%pipe_dims[NPS_INNER_DIAMETER_COLUMN_INDEX])
+		elbow90.socketD = tu(row["OD"])
+		elbow90.innerD = tu(row["ID"])
 		return elbow90.create(convertToSolid)
 
 class PartTableModel(QtCore.QAbstractTableModel): 
-	def __init__(self, parent=None, *args): 
+	def __init__(self, headers, data, parent=None, *args):
+		self.headers = headers
+		self.table_data = data
 		QtCore.QAbstractTableModel.__init__(self, parent, *args) 
 	
 	def rowCount(self, parent): 
-		return len(ELBOW_90_TABLE) 
+		print("rowCount %d"%len(self.table_data) )
+		return len(self.table_data) 
  
 	def columnCount(self, parent):
-		return len(ELBOW_90_HEADERS) 
+		print("columnCount %d"%len(self.headers) )
+		return len(self.headers) 
  
 	def data(self, index, role):
 		if not index.isValid(): 
 			return None
 		elif role != QtCore.Qt.DisplayRole: 
 			return None
-		return ELBOW_90_TABLE[index.row()][index.column()] 
+		return self.table_data[index.row()][index.column()] 
 
 	def getPartName(self, rowIndex):
-		return ELBOW_90_TABLE[rowIndex][ELBOW_90_PART_NAME_COLUMN_INDEX]
+		name_index = self.headers.index("Name")
+		return self.table_data[rowIndex][name_index]
 
 	def getPartRowIndex(self, partName):
-		""" Return row indes of the part with name partName.
+		""" Return row index of the part with name partName.
 		:param :partName name of the part
-		:return index of the first row whose part name is equal to partName
+		:return: index of the first row whose part name is equal to partName
 				return -1 if no row find.
 		"""
-		for row_i in range(ELBOW_90_PART_NAME_COLUMN_INDEX, len(ELBOW_90_TABLE)):
-			if ELBOW_90_TABLE[row_i][ELBOW_90_PART_NAME_COLUMN_INDEX] == partName:
+		name_index = self.headers.index("Name")
+		for row_i in range(name_index, len(self.table_data)):
+			if self.table_data[row_i][name_index] == partName:
 				return row_i
 		return -1
 	def headerData(self, col, orientation, role):
 		if orientation ==QtCore. Qt.Horizontal and role == QtCore.Qt.DisplayRole:
-			return ELBOW_90_HEADERS[col]
+			return self.headers[col]
 		return None
 
 class GuiElbow90(QtGui.QDialog):
@@ -385,8 +332,9 @@ class GuiElbow90(QtGui.QDialog):
 	"""Return index of the row in the NPC_PVC library.
 		Return -1 if nothing is selected.
 	"""
-	def __init__(self):
+	def __init__(self, table):
 		super(GuiElbow90, self).__init__()
+		self.table = table
 		self.initUi()
 	def initUi(self): 
 		Dialog = self # Added 
@@ -435,7 +383,10 @@ class GuiElbow90(QtGui.QDialog):
 		self.checkBoxCreateSolid.setText(QtGui.QApplication.translate("Dialog", "Create Solid", None, QtGui.QApplication.UnicodeUTF8))
 
 	def initTable(self):
-		self.model = PartTableModel()
+		# Read table data from CSV
+		self.model = PartTableModel(self.table.headers, self.table.data)
+#		print(len(self.table.headers))
+#		print(len(self.table.data))
 		self.tableViewParts.setModel(self.model)
 		
 	def getSelectedPartName(self):
@@ -462,7 +413,7 @@ class GuiElbow90(QtGui.QDialog):
 			partName = self.getSelectedPartName()
 			createSolid = self.checkBoxCreateSolid.isChecked()
 			if partName is not None:
-				elbow = Elbow90FromTable(document)
+				elbow = Elbow90FromTable(document, self.table)
 				elbow.create(partName, createSolid)
 				document.recompute()
 				# Save user input for the next dialog call.
@@ -496,14 +447,37 @@ class GuiElbow90(QtGui.QDialog):
 #elbow = Elbow(document)
 #elbow.create(True)
 
+# Before working with macros, try to load the dimension table.
+CSV_TABLE_PATH = App.ConfigGet("UserAppData")+"90-deg-elbow.csv"
+
+# Check if the CSV file exists
+if os.path.isfile(CSV_TABLE_PATH) == False:
+	text = "This macro requires %s  but this file does not exist."%(CSV_TABLE_PATH)
+	msgBox = QtGui.QMessageBox(QtGui.QMessageBox.Warning, "Creating of the elbow failed.", text)
+	msgBox.exec_()
+	exit(1) # Error
+
+print("Trying to load CSV file with dimensions: %s"%CSV_TABLE_PATH) 
+table = CsvTable()
+table.load(CSV_TABLE_PATH)
+
+if table.hasValidData == False:
+	text = "Invalid %s.\n"\
+		"It must contain columns \"Name\",\"DO\", \"IO\", \"G\", \"H\", and \"M\"."%(CSV_TABLE_PATH)
+	msgBox = QtGui.QMessageBox(QtGui.QMessageBox.Warning, "Creating of the elbow failed.", text)
+	msgBox.exec_()
+	exit(1) # Error
+
 # Test macro.
-def Test90Talbe():
-	elbow = Elbow90FromTable(document)
-	for row in ELBOW_90_TABLE:
-		partName = row[ELBOW_90_PART_NAME_COLUMN_INDEX]
+def Test90Table():
+	elbow = Elbow90FromTable(document, table)
+	for i in range(0, len(table.data)):
+		partName = table.getPartName(i)
 		print("Creating part %s",partName)
 		elbow.create(partName, True)
 		document.recompute()
 		
 
-form = GuiElbow90()
+#Test90Table()
+
+form = GuiElbow90(table)
