@@ -356,9 +356,9 @@ class GuiElbow90(QtGui.QDialog):
 # pyside-uic --indent=0 create-elbow.ui -o tmp.py
 	def setupUi(self, Dialog):
 		Dialog.setObjectName("Dialog")
-		Dialog.resize(619, 277)
+		Dialog.resize(619, 467)
 		self.buttonBox = QtGui.QDialogButtonBox(Dialog)
-		self.buttonBox.setGeometry(QtCore.QRect(310, 240, 301, 32))
+		self.buttonBox.setGeometry(QtCore.QRect(310, 430, 301, 32))
 		self.buttonBox.setOrientation(QtCore.Qt.Horizontal)
 		self.buttonBox.setStandardButtons(QtGui.QDialogButtonBox.Cancel|QtGui.QDialogButtonBox.Ok)
 		self.buttonBox.setObjectName("buttonBox")
@@ -371,6 +371,11 @@ class GuiElbow90(QtGui.QDialog):
 		self.checkBoxCreateSolid.setGeometry(QtCore.QRect(10, 10, 171, 22))
 		self.checkBoxCreateSolid.setChecked(True)
 		self.checkBoxCreateSolid.setObjectName("checkBoxCreateSolid")
+		self.label = QtGui.QLabel(Dialog)
+		self.label.setGeometry(QtCore.QRect(80, 240, 401, 191))
+		self.label.setText("")
+		self.label.setPixmap(QtGui.QPixmap(App.ConfigGet("UserAppData")+"90-deg-elbow-dimensions.png"))
+		self.label.setObjectName("label")
 
 		self.retranslateUi(Dialog)
 		QtCore.QObject.connect(self.buttonBox, QtCore.SIGNAL("accepted()"), Dialog.accept)
@@ -385,8 +390,6 @@ class GuiElbow90(QtGui.QDialog):
 	def initTable(self):
 		# Read table data from CSV
 		self.model = PartTableModel(self.table.headers, self.table.data)
-#		print(len(self.table.headers))
-#		print(len(self.table.data))
 		self.tableViewParts.setModel(self.model)
 		
 	def getSelectedPartName(self):
@@ -443,9 +446,6 @@ class GuiElbow90(QtGui.QDialog):
 		self.checkBoxCreateSolid.setCheckState(checkState)
 		self.selectPartByName(settings.value("LastSelectedPartName"))
 
-
-#elbow = Elbow(document)
-#elbow.create(True)
 
 # Before working with macros, try to load the dimension table.
 CSV_TABLE_PATH = App.ConfigGet("UserAppData")+"90-deg-elbow.csv"
