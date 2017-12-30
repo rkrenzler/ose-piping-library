@@ -13,3 +13,10 @@ Linux:
 1. Open or create a FreeCAD document.
 2. Select **Macro**->**Macros Menu**.
 3. Select **create-pipe.FCMacro**, **create-elbow-90.FCMacro** or **create-tee.FCMacro** and click **Execute**.
+   
+## Example ##
+![90°-elbow](doc/pvc-elbow-90-gui-screenshot.png)
+
+creates
+![90°-elbow](doc/pvc-elbow-90-cad-screenshot.png)
+
