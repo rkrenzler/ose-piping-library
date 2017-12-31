@@ -1,0 +1,489 @@
+# -*- coding: utf-8 -*-
+# Author: Ruslan Krenzler.
+# Date: 16 December 2017
+# Create a elbow-fitting.
+# Version 0.3
+
+import math
+import csv
+import os.path
+
+from PySide import QtCore, QtGui
+import FreeCAD
+import Spreadsheet
+import Sketcher
+import Part
+
+
+document = App.activeDocument()
+tu = FreeCAD.Units.parseQuantity
+
+# The value RELATIVE_EPSILON is used to slightly change the size of a subtracted part
+# to prevent problems with boolean operations.
+# This value does not change the appearance of part and can be large.
+# If the original value is L then we often use the value L*(1+RELATIVE_EPSILON) instead.
+# The relative deviation is then (L*(1+RELATIVE_EPSILON)-L)/L = RELATIVE_EPSILON.
+# That is why the constant has "relative" in its name.
+RELATIVE_EPSILON = 0.1
+
+class CsvTable:
+	""" Read elbow dimensions from a csv file"""
+	def __init__(self):
+		self.headers = []
+		self.data = []
+		self.hasValidData = False
+
+	def load(self, filename):
+		"""Load data from a CSV file."""
+		self.hasValidData = False
+		with open(filename, "r") as csvfile:
+			csv_reader = csv.reader(csvfile, delimiter=',', quotechar='"')
+			self.headers = csv_reader.next()
+			# Fill the talble
+			self.data = []
+			for row in csv_reader:
+				self.data.append(row)
+			csvfile.close() # Should I close this file explicitely?
+			self.hasValidData = self.hasNecessaryColumns()
+
+	def hasNecessaryColumns(self):
+		""" Check if the data contains all calumns required to create an elbow."""
+		return all(h in self.headers for h in ["Name", "alpha", "POD", "PID", "H", "J", "M"])
+
+	def findPart(self, name):
+		"""Return first first raw with the particular part name as a dictionary."""
+		# First find out the index of the column "Name".
+		ci = self.headers.index("Name")
+		# Search for the first appereance of the name in this column.
+		for row in self.data:
+			if row[ci] == name:
+				# Convert row to dicionary.
+				return dict(zip(self.headers, row))
+		return None
+
+	def getPartName(self, index):
+		"""Return part name of a row with the index *index*."""
+		ci = self.headers.index("Name")
+		return self.data[index][ci]
+
+
+class Error(Exception):
+    """Base class for exceptions in this module."""
+    pass
+
+
+class UnplausibleDimensions(Error):
+    """Exception raised when dimensions are unplausible. For example if
+	outer diameter is larger than the iner one.
+
+    Attributes:
+        message -- explanation of the error
+    """
+
+    def __init__(self, message):
+        self.message = message
+
+
+class Elbow:
+	def __init__(self, document):
+		self.document = document
+		# Set default values.
+		self.alpha = tu("60 deg")
+		self.outerD = tu("3 in")
+		self.socketD = tu("2 in")
+		self.innerD = tu("1 in")
+		self.len1 = tu("4 in")
+		self.len2 = tu("5 in")
+
+	@staticmethod
+	def toSolid(document, part, name):
+		"""Convert object to a solid.
+			Basically those are commands, which FreeCAD runs when user converts a part to a solid.
+		"""
+		s = part.Shape.Faces
+		s = Part.Solid(Part.Shell(s))
+		o = document.addObject("Part::Feature", name)
+		o.Label=name
+		o.Shape=s
+		return o
+	@staticmethod
+	def NestedObjects(group):
+		res = []
+		if group.OutList == []:
+			res.append(group)
+		else:
+			# Append children first.
+			for o in group.OutList:
+				res += Elbow.NestedObjects(o)
+			res.append(group)
+		return res
+
+	def checkDimensions(self):
+		if not ( (self.alpha > tu("0 deg")) and (self.alpha <= tu("180 deg")) ):
+			raise UnplausibleDimensions("alpha %s must be within of range (0,180]"%self.alpha)
+		if not ( self.innerD > 0):
+			raise UnplausibleDimensions("Inner Diameter %s must be positive"%self.innerD)
+		if not ( self.socketD >= self.innerD):
+			raise UnplausibleDimensions("Sockeet Diameter %s must be greater than or equal to inner Diameter=%s"%(self.socketD, self.innerD))
+		if not ( self.outerD > self.socketD):
+			raise UnplausibleDimensions("Outer Diameter %s must be greater than socket Diameter =%s"%(self.outerD, self.socketD))
+		if not ( self.len1 > 0):
+			raise UnplausibleDimensions("Length len1=%s must be positive"%self.len1)
+		if not ( self.len2 > 0):
+			raise UnplausibleDimensions("Length len2=%s must be positive"%self.len2)
+			
+	def createElbowCylinder(self, group, r_cyl, r_bent, alpha, len1, len2):
+		"""Create a cylinder with a radius r_cyl with a base on X-Y plane
+		and bent it by angle alpha along radius r_bent. Add streight cylinders at the ends
+
+		put all new created objects to a group.
+		This should simplify the cleaning up of the intermediate parts.
+	
+		:param r_cyl: radius of the cylinder in Base.Quantity
+		:param r_bent: radius of the path in Base.Quantity
+		:param alpha: in Base.Quantity
+		:param len1: length of the streight part 1
+		:param len2: length of the streight part 2
+		"""
+		base_sketch = self.document.addObject('Sketcher::SketchObject','BaseSketch')
+		base_sketch.Placement = App.Placement(App.Vector(0.000000,0.000000,0.000000),App.Rotation(0.000000,0.000000,0.000000,1.000000))
+
+		# When adding a radius, do not forget to convert the units.
+		base_sketch.addGeometry(Part.Circle(App.Vector(0.000000,0.000000,0),App.Vector(0,0,1),r_cyl),False)
+
+		# Add sweeping part into X-Z plane.
+		path_sketch = self.document.addObject('Sketcher::SketchObject','PathSketch')
+		path_sketch.Placement = App.Placement(App.Vector(0.000000,0.000000,0.000000),App.Rotation(-0.707107,0.000000,0.000000,-0.707107))
+		# Note the pskecth is rotatet, therefore y and z coordinates are exchanged (? is it still true)
+		# Add a line into to the bottom direction (negative Z).
+		line1 = Part.Line(App.Vector(0.000000,0.000000,0),App.Vector(-0.000000,-len1,0))
+		path_sketch.addGeometry(line1, False)
+
+		# Add the arc part.
+		start = (tu("pi rad") - alpha).getValueAs("rad")
+		stop = tu("pi rad").getValueAs("rad")
+		arc = Part.ArcOfCircle(Part.Circle(App.Vector(r_bent,0,0),App.Vector(0,0,1),r_bent),start, stop)
+		path_sketch.addGeometry(arc,False)
+
+		# Find coordinates of the right point of the arc.
+		x1 = (1-math.cos(alpha.getValueAs("rad")))*r_bent
+		z1 = math.sin(alpha.getValueAs("rad"))*r_bent
+
+		x2 = x1 + math.cos((tu("pi/2 rad")-alpha).getValueAs("rad"))*len2
+		z2 = z1 + math.sin((tu("pi/2 rad")-alpha).getValueAs("rad"))*len2
+		# Draw a streight line for the right pipe.
+		line2 = Part.Line(App.Vector(x1,z1,0),App.Vector(x2,z2,0))
+		line2_geometry = path_sketch.addGeometry(line2,False)
+		# Sweep the parts.
+		sweep = self.document.addObject('Part::Sweep','Sweep')
+		sweep.Sections=[base_sketch, ]
+		sweep.Spine=(path_sketch,["Edge1", "Edge2", "Edge3"])
+		sweep.Solid=True
+		sweep.Frenet=False # Is it necessary?
+		# Add all the objects to the group.
+		group.addObject(base_sketch)
+		group.addObject(path_sketch,)
+		group.addObject(sweep)
+		return sweep
+		
+	def createElbowPart(self, group):
+		# Create a ellbow pipe as a difference of two cylinders
+		outer_sweep = self.createElbowCylinder(group, self.outerD/2, self.outerD/2, self.alpha, self.len1, self.len2)
+		# Make the inner cylinder a littlebit longer, to prevent nummerical errors
+		# wenn calculating the difference.
+		inner_sweep = self.createElbowCylinder(group, self.innerD/2, self.outerD/2, self.alpha, 
+				self.len1*(1+RELATIVE_EPSILON), self.len2*(1+RELATIVE_EPSILON))
+		bent_cut = self.document.addObject("Part::Cut","BentCut")
+		bent_cut.Base = outer_sweep
+		bent_cut.Tool = inner_sweep
+		group.addObject(bent_cut)
+		return bent_cut
+		
+	def create(self, convertToSolid):
+		self.checkDimensions()
+		"""Create elbow."""
+		# Create new group to put all the temporal data.
+		group = self.document.addObject("App::DocumentObjectGroup", "elbow group")
+		# Create the bent part.
+		bent_part = self.createElbowPart(group)
+		# Remove cyliders from both ends for sockets
+		inner_cylinder1 = self.document.addObject("Part::Cylinder","InnerCylinder1")
+		inner_cylinder1.Radius = self.socketD/2
+		inner_cylinder1.Height = self.len1*(1+RELATIVE_EPSILON)
+		inner_cylinder1.Placement.Base = App.Vector(0,0, -inner_cylinder1.Height)
+
+		inner_cylinder2 = self.document.addObject("Part::Cylinder","InnerCylinder2")
+		inner_cylinder2.Radius = self.socketD/2
+		inner_cylinder2.Height = self.len2*(1+RELATIVE_EPSILON)
+		inner_cylinder2.Placement.Base = App.Vector(0,0, -inner_cylinder2.Height)
+		x = (1-math.cos(self.alpha.getValueAs("rad"))) *self.outerD/2
+		z = math.sin(self.alpha.getValueAs("rad"))*self.outerD/2
+		inner_cylinder2.Placement = App.Placement(App.Vector(x,0,z),App.Rotation(App.Vector(0,1,0),self.alpha))
+		cut1 = self.document.addObject("Part::Cut","PipeCut1") 
+		cut1.Base = bent_part
+		cut1.Tool = inner_cylinder1
+		elbow = self.document.addObject("Part::Cut","elbow") 
+		elbow.Base = cut1
+		elbow.Tool = inner_cylinder2
+		group.addObject(elbow)
+		if convertToSolid:
+			# Before making a solid, recompute documents. Otherwise there will be
+			#    s = Part.Solid(Part.Shell(s))
+			#    <class 'Part.OCCError'>: Shape is null
+			# exception.
+			self.document.recompute()
+			# Now convert all parts to solid, and remove intermediate data.
+			solid = self.toSolid(self.document, elbow, "elbow (solid)")
+			# Remove previous (intermediate parts).
+			parts = Elbow.NestedObjects(group)
+			# Document.removeObjects can remove multple objects, when we use
+			# parts directly. To prevent exceptions with deleted objects,
+			# use the name list instead.
+			names_to_remove = []
+			for part in parts:
+				if part.Name not in names_to_remove:
+					names_to_remove.append(part.Name)
+			for name in names_to_remove:
+				print("Deleting temporary objects %s."%name)
+				self.document.removeObject(name)
+			return solid
+		return elbow
+
+class ElbowAlpha:
+	"""Create a symetrical alpha° elbow"""
+	def __init__(self, document):
+		self.document = document
+		# setup some test values
+		self.alpha = tu("45 deg")
+		self.H = tu("4 in")
+		self.J = tu("2 in")
+		self.M = tu("3 in")
+		self.socketD = tu("2 in")
+		self.innerD = tu("1 in")
+	def create(self, convertToSolid = True):
+		elbow = Elbow(self.document)
+		elbow.alpha = self.alpha
+		elbow.outerD = self.M
+		elbow.socketD = self.socketD
+		elbow.innerD = self.innerD
+		elbow.len1 = self.H - self.J
+		elbow.len2 =elbow.len1
+		return elbow.create(convertToSolid)
+
+class ElbowAlphaFromTable:
+	"""Create a part with dimensions from CSV table."""
+	def __init__ (self, document, table):
+		self.document = document
+		self.table = table
+	def create(self, partName, convertToSolid = True):
+		elbow = ElbowAlpha(self.document)
+		row = self.table.findPart(partName)
+		if row is None:
+			print("Part not found")
+			return
+		elbow.alpha = tu(row["alpha"])
+		elbow.H = tu(row["H"])
+		elbow.J = tu(row["J"])
+		elbow.M = tu(row["M"])
+
+		elbow.socketD = tu(row["POD"])
+		elbow.innerD = tu(row["PID"])
+		return elbow.create(convertToSolid)
+
+class PartTableModel(QtCore.QAbstractTableModel): 
+	def __init__(self, headers, data, parent=None, *args):
+		self.headers = headers
+		self.table_data = data
+		QtCore.QAbstractTableModel.__init__(self, parent, *args) 
+	
+	def rowCount(self, parent): 
+		print("rowCount %d"%len(self.table_data) )
+		return len(self.table_data) 
+ 
+	def columnCount(self, parent):
+		print("columnCount %d"%len(self.headers) )
+		return len(self.headers) 
+ 
+	def data(self, index, role):
+		if not index.isValid(): 
+			return None
+		elif role != QtCore.Qt.DisplayRole: 
+			return None
+		return self.table_data[index.row()][index.column()] 
+
+	def getPartName(self, rowIndex):
+		name_index = self.headers.index("Name")
+		return self.table_data[rowIndex][name_index]
+
+	def getPartRowIndex(self, partName):
+		""" Return row index of the part with name partName.
+		:param :partName name of the part
+		:return: index of the first row whose part name is equal to partName
+				return -1 if no row find.
+		"""
+		name_index = self.headers.index("Name")
+		for row_i in range(name_index, len(self.table_data)):
+			if self.table_data[row_i][name_index] == partName:
+				return row_i
+		return -1
+	def headerData(self, col, orientation, role):
+		if orientation ==QtCore. Qt.Horizontal and role == QtCore.Qt.DisplayRole:
+			return self.headers[col]
+		return None
+
+class GuiElbowAlpha(QtGui.QDialog):
+	QSETTINGS_APPLICATION = "OSE piping freecad macros"
+	QSETTINGS_NAME = "elbow alpha user input"
+	def __init__(self, table):
+		super(GuiElbowAlpha, self).__init__()
+		self.table = table
+		self.initUi()
+	def initUi(self): 
+		Dialog = self # Added 
+		self.result = -1 
+		self.setupUi(self)
+		# Fill table with dimensions. 
+		self.initTable()
+
+		# Restore previous user input. Ignore exceptions to prevent this part
+		# part of the code to prevent GUI from starting, once settings are broken.
+		try:
+			self.restoreInput()
+		except Exception as e:
+			print ("Could not restore old user input!")
+			print(e)
+		self.show()
+
+# The following lines are from QtDesigner .ui-file processed by pyside-uic
+# pyside-uic --indent=0 create-elbow-alpha.ui -o tmp.py
+# The file paths needs to be adjusted manually. For example
+# self.label.setPixmap(QtGui.QPixmap(App.ConfigGet("UserAppData")+"alpha-deg-elbow-dimensions.png"))
+# access datata in some special FreeCAD directory.
+	def setupUi(self, Dialog):
+		Dialog.setObjectName("Dialog")
+		Dialog.resize(619, 477)
+		self.buttonBox = QtGui.QDialogButtonBox(Dialog)
+		self.buttonBox.setGeometry(QtCore.QRect(310, 440, 301, 32))
+		self.buttonBox.setOrientation(QtCore.Qt.Horizontal)
+		self.buttonBox.setStandardButtons(QtGui.QDialogButtonBox.Cancel|QtGui.QDialogButtonBox.Ok)
+		self.buttonBox.setObjectName("buttonBox")
+		self.tableViewParts = QtGui.QTableView(Dialog)
+		self.tableViewParts.setGeometry(QtCore.QRect(10, 40, 601, 192))
+		self.tableViewParts.setSelectionMode(QtGui.QAbstractItemView.SingleSelection)
+		self.tableViewParts.setSelectionBehavior(QtGui.QAbstractItemView.SelectRows)
+		self.tableViewParts.setObjectName("tableViewParts")
+		self.checkBoxCreateSolid = QtGui.QCheckBox(Dialog)
+		self.checkBoxCreateSolid.setGeometry(QtCore.QRect(10, 10, 171, 22))
+		self.checkBoxCreateSolid.setChecked(True)
+		self.checkBoxCreateSolid.setObjectName("checkBoxCreateSolid")
+		self.label = QtGui.QLabel(Dialog)
+		self.label.setGeometry(QtCore.QRect(110, 240, 401, 191))
+		self.label.setText("")
+		self.label.setPixmap(QtGui.QPixmap(App.ConfigGet("UserAppData")+"alpha-deg-elbow-dimensions.png"))
+		self.label.setObjectName("label")
+
+		self.retranslateUi(Dialog)
+		QtCore.QObject.connect(self.buttonBox, QtCore.SIGNAL("accepted()"), Dialog.accept)
+		QtCore.QObject.connect(self.buttonBox, QtCore.SIGNAL("rejected()"), Dialog.reject)
+		QtCore.QMetaObject.connectSlotsByName(Dialog)
+
+# The following lines are from QtDesigner .ui-file processed by pyside-uic
+	def retranslateUi(self, Dialog):
+		Dialog.setWindowTitle(QtGui.QApplication.translate("Dialog", "Create alpha° elbow", None, QtGui.QApplication.UnicodeUTF8))
+		self.checkBoxCreateSolid.setText(QtGui.QApplication.translate("Dialog", "Create Solid", None, QtGui.QApplication.UnicodeUTF8))
+
+	def initTable(self):
+		# Read table data from CSV
+		self.model = PartTableModel(self.table.headers, self.table.data)
+		self.tableViewParts.setModel(self.model)
+		
+	def getSelectedPartName(self):
+		sel = form.tableViewParts.selectionModel()
+		if sel.isSelected:
+			if len(sel.selectedRows())> 0:
+				rowIndex = sel.selectedRows()[0].row()
+				return self.model.getPartName(rowIndex)
+		return None
+
+	def selectPartByName(self, partName):
+		"""Select first row with a part with a name partName."""
+		if partName is not None:
+			row_i = self.model.getPartRowIndex(partName)
+			if row_i >= 0:
+				self.tableViewParts.selectRow(row_i)
+
+	def accept(self):
+		"""User clicked OK"""
+		# Update active document.  If there is none, show a warning message and do nothing.
+		document = App.activeDocument()
+		if document is not None:
+		# Get suitable row from the the table.
+			partName = self.getSelectedPartName()
+			createSolid = self.checkBoxCreateSolid.isChecked()
+			if partName is not None:
+				elbow = ElbowAlphaFromTable(document, self.table)
+				elbow.create(partName, createSolid)
+				document.recompute()
+				# Save user input for the next dialog call.
+				self.saveInput()
+				# Call parent class.
+				super(GuiElbowAlpha, self).accept()
+			else:
+				msgBox = QtGui.QMessageBox()
+				msgBox.setText("Select part")
+				msgBox.exec_()
+		else:
+			text = "I have not found any active document were I can create an elbow.\n"\
+				"Use menu File->New to create a new document first, "\
+				"then try to create the elbow again."
+			msgBox = QtGui.QMessageBox(QtGui.QMessageBox.Warning, "Creating of the elbow failed.", text)
+			msgBox.exec_()
+	def saveInput(self):
+		"""Store user input for the next run."""
+		settings = QtCore.QSettings(GuiElbowAlpha.QSETTINGS_APPLICATION, GuiElbowAlpha.QSETTINGS_NAME)
+		check = self.checkBoxCreateSolid.checkState()
+		settings.setValue("checkBoxCreateSolid", int(check))
+		settings.setValue("LastSelectedPartName", self.getSelectedPartName())
+		settings.sync()
+	def restoreInput(self):
+		settings = QtCore.QSettings(GuiElbowAlpha.QSETTINGS_APPLICATION, GuiElbowAlpha.QSETTINGS_NAME)
+		checkState = QtCore.Qt.CheckState(int(settings.value("checkBoxCreateSolid")))
+		self.checkBoxCreateSolid.setCheckState(checkState)
+		self.selectPartByName(settings.value("LastSelectedPartName"))
+
+
+# Before working with macros, try to load the dimension table.
+CSV_TABLE_PATH = App.ConfigGet("UserAppData")+"alpha-deg-elbow.csv"
+
+# Check if the CSV file exists
+if os.path.isfile(CSV_TABLE_PATH) == False:
+	text = "This macro requires %s  but this file does not exist."%(CSV_TABLE_PATH)
+	msgBox = QtGui.QMessageBox(QtGui.QMessageBox.Warning, "Creating of the elbow failed.", text)
+	msgBox.exec_()
+	exit(1) # Error
+
+print("Trying to load CSV file with dimensions: %s"%CSV_TABLE_PATH) 
+table = CsvTable()
+table.load(CSV_TABLE_PATH)
+
+if table.hasValidData == False:
+	text = 'Invalid %s.\n'\
+		'It must contain columns "Name", "alpha", "POD", "PID", "H", "K", and "M".'%(CSV_TABLE_PATH)
+	msgBox = QtGui.QMessageBox(QtGui.QMessageBox.Warning, "Creating of the elbow failed.", text)
+	msgBox.exec_()
+	exit(1) # Error
+
+# Test macro.
+def TestAlphaTable():
+	elbow = ElbowAlphaFromTable(document, table)
+	for i in range(0, len(table.data)):
+		print("Selecting row %d"%i)
+		partName = table.getPartName(i)
+		print("Creating part %s"%partName)
+		elbow.create(partName, True)
+		document.recompute()
+		
+
+#TestAlphaTable()
+
+form = GuiElbowAlpha(table)
