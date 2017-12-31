@@ -48,7 +48,7 @@ class CsvTable:
 
 	def hasNecessaryColumns(self):
 		""" Check if the data contains all calumns required to create an elbow."""
-		return all(h in self.headers for h in ["Name", "OD", "ID", "G", "H", "M"])
+		return all(h in self.headers for h in ["Name", "POD", "PID", "G", "H", "M"])
 
 	def findPart(self, name):
 		"""Return first first raw with the particular part name as a dictionary."""
@@ -281,8 +281,8 @@ class Elbow90FromTable:
 		elbow90.H = tu(row["H"])
 		elbow90.M = tu(row["M"])
 
-		elbow90.socketD = tu(row["OD"])
-		elbow90.innerD = tu(row["ID"])
+		elbow90.socketD = tu(row["POD"])
+		elbow90.innerD = tu(row["PID"])
 		return elbow90.create(convertToSolid)
 
 class PartTableModel(QtCore.QAbstractTableModel): 
@@ -463,8 +463,8 @@ table = CsvTable()
 table.load(CSV_TABLE_PATH)
 
 if table.hasValidData == False:
-	text = "Invalid %s.\n"\
-		"It must contain columns \"Name\",\"DO\", \"IO\", \"G\", \"H\", and \"M\"."%(CSV_TABLE_PATH)
+	text = 'Invalid %s.\n'\
+		'It must contain columns "Name","POD", "PID", "G", "H", and "M".'%(CSV_TABLE_PATH)
 	msgBox = QtGui.QMessageBox(QtGui.QMessageBox.Warning, "Creating of the elbow failed.", text)
 	msgBox.exec_()
 	exit(1) # Error
