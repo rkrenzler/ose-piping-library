@@ -1,4 +1,4 @@
-"Name","PipeSize","alpha","Schedule","OD","ID","H","J","M","Approx. Wt."
+"Name","PipeSize","alpha","Schedule","POD","PID","H","J","M","Approx. Wt."
 "417-005","1/2""","45 deg",40,"0.840 in","0.602 in","1 in","1/4 in","1+3/32 in",".04 lb"
 "417-007","3/4""","45 deg",40,"1.050 in","0.804 in","1+3/8 in","7/16 in","1+5/16 in",".07 lb"
 "417-010","1""","45 deg",40,"1.315 in","1.029 in","1+1/2 in","15/32 in","1+21/32 in",".11 lb"
