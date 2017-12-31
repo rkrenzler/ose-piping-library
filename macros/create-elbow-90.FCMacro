@@ -328,10 +328,7 @@ class PartTableModel(QtCore.QAbstractTableModel):
 
 class GuiElbow90(QtGui.QDialog):
 	QSETTINGS_APPLICATION = "OSE piping freecad macros"
-	QSETTINGS_NAME = "elbow user input"
-	"""Return index of the row in the NPC_PVC library.
-		Return -1 if nothing is selected.
-	"""
+	QSETTINGS_NAME = "elbow 90 user input"
 	def __init__(self, table):
 		super(GuiElbow90, self).__init__()
 		self.table = table
