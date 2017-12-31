@@ -15,8 +15,14 @@ Linux:
 3. Select **create-pipe.FCMacro**, **create-elbow-90.FCMacro** or **create-tee.FCMacro** and click **Execute**.
    
 ## Example ##
-![90°-elbow](doc/pvc-elbow-90-gui-screenshot.png)
+### 90°-elbow ### 
+![90°-elbow dialog](doc/pvc-elbow-90-gui-screenshot.png)
 
 creates
-![90°-elbow](doc/pvc-elbow-90-cad-screenshot.png)
+![90°-elbow CAD screenshot](doc/pvc-elbow-90-cad-screenshot.png).
 
+### alpha°-elbow ### 
+Create an arbitrary elbow with the angle alpha within the range of 0°-180°.
+![alpha°-elbow dialog](doc/pvc-elbow-alpha-gui-screenshot.png)
+creates
+![alpha°-elbow CAD](doc/pvc-elbow-alpha-cad-screenshot.png).
