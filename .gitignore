@@ -102,3 +102,7 @@ ENV/
 
 # LibreCAD backup files.
 *.dxf~
+# LyX backup files.
+*.lyx~
+# gedit backup files
+\#*
