@@ -14,18 +14,52 @@ import Spreadsheet
 import Sketcher
 import Part
 
+# Note only columns "Name", "POD", "PID", "POD1", "PID1", "L", "M", "M1", and "N"
+# are used for calculations, all other are used for information. For example
+# "PipeSize", "Schedule", "PipeSize1" show pipe sizing in more readable form.
 
 tu = FreeCAD.Units.parseQuantity
 
-# The value RELATIVE_EPSILON is used to slightly change the size of a subtracted part
-# to prevent problems with boolean operations.
-# This value does not change the appearance of part and can be large.
-# If the original value is L then we often use the value L*(1+RELATIVE_EPSILON) instead.
-# The relative deviation is then (L*(1+RELATIVE_EPSILON)-L)/L = RELATIVE_EPSILON.
-# That is why the constant has "relative" in its name.
-RELATIVE_EPSILON = 0.1
+class CsvTable:
+	""" Read elbow dimensions from a csv file"""
+	def __init__(self):
+		self.headers = []
+		self.data = []
+		self.hasValidData = False
 
+	def load(self, filename):
+		"""Load data from a CSV file."""
+		self.hasValidData = False
+		with open(filename, "r") as csvfile:
+			csv_reader = csv.reader(csvfile, delimiter=',', quotechar='"')
+			self.headers = csv_reader.next()
+			# Fill the talble
+			self.data = []
+			for row in csv_reader:
+				self.data.append(row)
+			csvfile.close() # Should I close this file explicitely?
+			self.hasValidData = self.hasNecessaryColumns()
 
+	def hasNecessaryColumns(self):
+		""" Check if the data contains all calumns required to create an elbow."""
+		return all(h in self.headers for h in ["Name", "POD", "PID", "POD1", "PID1", "L", "M", "M1", "N"])
+
+	def findPart(self, name):
+		"""Return first first raw with the particular part name as a dictionary."""
+		# First find out the index of the column "Name".
+		ci = self.headers.index("Name")
+		# Search for the first appereance of the name in this column.
+		for row in self.data:
+			if row[ci] == name:
+				# Convert row to dicionary.
+				return dict(zip(self.headers, row))
+		return None
+
+	def getPartName(self, index):
+		"""Return part name of a row with the index *index*."""
+		ci = self.headers.index("Name")
+		return self.data[index][ci]
+		
 class Error(Exception):
     """Base class for exceptions in this module."""
     pass
@@ -33,7 +67,7 @@ class Error(Exception):
 
 class UnplausibleDimensions(Error):
     """Exception raised when dimensions are unplausible. For example if
-	outer diameter is larger than the iner one.
+         outer diameter is larger than the iner one.
 
     Attributes:
         message -- explanation of the error
@@ -47,14 +81,14 @@ class Coupling:
 	def __init__(self, document):
 		self.document = document
 		# Set default values.
-		self.M1 = tu("5 in") # Outer diameter of socket 1
-		self.POD1 = tu("4 in") # Pipe outer diameter at the socket 1
-		self.PID1 = tu("3 in") # Pipe inner diameter at the socket 1
-		self.L1 = tu("4 in") # Length of the socket1
-		self.M2 = tu("3 in") # Outer diameter of socket 2
-		self.POD2 = tu("2 in") # Pipe outer diameter at the socket 2
-		self.PID2 = tu("1 in") # Pipe inner diameter at the socket 2
-		self.L2 = tu("4 in") # Length of the socket2
+		self.M1 = tu("5 in") # Outer diameter of socket 1.
+		self.POD1 = tu("4 in") # Pipe outer diameter at the socket 1.
+		self.PID1 = tu("3 in") # Pipe inner diameter at the socket 1.
+		self.L1 = tu("4 in") # Length of the socket1.
+		self.M2 = tu("3 in") # Outer diameter of socket 2.
+		self.POD2 = tu("2 in") # Pipe outer diameter at the socket 2.
+		self.PID2 = tu("1 in") # Pipe inner diameter at the socket 2.
+		self.L2 = tu("4 in") # Length of the socket2.
 		self.L3 = tu("1 in") # Lenght of the intemidate section of the coupling.
 
 	@staticmethod
@@ -95,9 +129,13 @@ class Coupling:
 			raise UnplausibleDimensions("Intermediate length L3=%s must be positive"%self.L3)
 			
 	def calculateShiftA2(self):
-		# Determin thickness a2
+		"""Determine an additional length a2 of the socket 1, such that the wall size of the intermediate
+		section on it thin part is not smaller than the walls of the sockets.
+		The size a2 does not come from some document or standard. It is only chosen to avoid thin walls
+		in the intermediate section of thecoupling. Probably a2 must be even larger.
+		"""
 		a2 = max(self.M1-self.POD1, self.M2-self.POD2) / 2
-		x = (self.POD2-self.POD1)
+		x = (self.POD1-self.POD2)
 		# The math.sqrt will return Float. That is why
 		# we need to convert x in float too.
 		factor = x.Value/math.sqrt(4*self.L3**2+x**2)
@@ -174,7 +212,67 @@ class Coupling:
 			return solid
 		return coupling
 
+class CouplingFromTable:
+	"""Crweate a part with dimensions from a CSV table.
+	Note that table dimensions M, PID, POD corresponds to the general coupling dimensions
+	M1, PID1 and POD1, and the table dimensions M1, PID1 and POD1 corresponds to 
+	a general coupling dimensions M2, PID2, POD2. 
+	The strange table dimensions are taken from a documentation of a fitting manufacture.
+	"""
+	def __init__ (self, document, table):
+		self.document = document
+		self.table = table
+	def create(self, partName, convertToSolid = True):
+		coupling = Coupling(self.document)
+		row = self.table.findPart(partName)
+		if row is None:
+			print("Part not found")
+			return
+			
+		coupling.M1 = tu(row["M"]) # Outer diameter of socket 1.
+		coupling.POD1 = tu(row["POD"]) # Pipe outer diameter at the socket 1.
+		coupling.PID1 = tu(row["PID"]) # Pipe inner diameter at the socket 1.
+		coupling.L1 = (tu(row["L"])-tu(row["N"]))/2# Length of the socket1.
+		coupling.M2 = tu(row["M1"]) # Outer diameter of socket 2.
+		coupling.POD2 = tu(row["POD1"])  # Pipe outer diameter at the socket 2.
+		coupling.PID2 = tu(row["PID1"]) # Pipe inner diameter at the socket 2.
+		coupling.L2 = coupling.L1 # Length of the socket2.
+		coupling.L3 = tu(row["N"]) # Lenght of the intemidate section of the coupling.
+
+		return coupling.create(convertToSolid)
+		
 document = App.activeDocument()
-coupling = Coupling(document)
-coupling.create(True)
+
+# Before working with macros, try to load the dimension table.
+CSV_TABLE_PATH = App.ConfigGet("UserAppData")+"coupling.csv"
+
+# Check if the CSV file exists
+if os.path.isfile(CSV_TABLE_PATH) == False:
+	text = "This macro requires %s  but this file does not exist."%(CSV_TABLE_PATH)
+	msgBox = QtGui.QMessageBox(QtGui.QMessageBox.Warning, "Creating of the coupling failed.", text)
+	msgBox.exec_()
+	exit(1) # Error
+
+print("Trying to load CSV file with dimensions: %s"%CSV_TABLE_PATH) 
+table = CsvTable()
+table.load(CSV_TABLE_PATH)
+
+if table.hasValidData == False:
+	text = 'Invalid %s.\n'\
+		'It must contain columns "Name", "POD", "PID", "POD1", "PID1", "L", "M", "M1", and "N".'%(CSV_TABLE_PATH)
+	msgBox = QtGui.QMessageBox(QtGui.QMessageBox.Warning, "Creating of the coupling failed.", text)
+	msgBox.exec_()
+	exit(1) # Error
+	
+# Test macro.
+def TestTable():
+	coupling = CouplingFromTable(document, table)
+	for i in range(0, len(table.data)):
+		print("Selecting row %d"%i)
+		partName = table.getPartName(i)
+		print("Creating part %s"%partName)
+		coupling.create(partName, True)
+		document.recompute()
+
+TestTable()
 document.recompute()
