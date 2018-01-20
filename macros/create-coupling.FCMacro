@@ -143,6 +143,20 @@ class Coupling:
 		return a1
 		
 	def createOuterPart(self):
+		if self.M1 == self.M2:
+			return self.createOuterPartEqual()
+		else:
+			return self.createOuterPartReduced()
+
+	def createOuterPartEqual(self):
+		""" Create a outer part which is cylinder only. This is when M1 and M2 are the same"""
+		# Create socket 1.
+		outer = self.document.addObject("Part::Cylinder","Cylinder")
+		outer.Radius = self.M1
+		outer.Height = self.L1+self.L2+self.L3
+		return outer
+
+	def createOuterPartReduced(self):
 		""" Create a outer part which is cylinder+cone+cylinder."""
 		# Create socket 1.
 		cylinder1 = self.document.addObject("Part::Cylinder","Cylinder1")
@@ -164,7 +178,33 @@ class Coupling:
 		outer = document.addObject("Part::MultiFuse","OuterParts")
 		outer.Shapes = [cylinder1, cone, cylinder2]
 		return outer
+
 	def createInnerPart(self):
+		if self.PID1 == self.PID2:
+			return self.createInnerPartEqual()
+		else:
+			return self.createOuterPartEqual()
+
+	def createInnerPartEqual(self):
+		""" Create inner part from cylinders. This is when PID1 and PID2 are the same"""
+		""" Create a outer part which is cylinder+cone+cylinder."""
+		#inner_cylinder1.Placement.Base = App.Vector(0,0, -inner_cylinder1.Height)
+		# Create parts which must be removed from the cone.
+		cylinder1i = self.document.addObject("Part::Cylinder","Cylinder1i")
+		cylinder1i.Radius = self.POD1
+		cylinder1i.Height = self.L1
+		cylinder3i = self.document.addObject("Part::Cylinder","Cylinder3i")
+		cylinder3i.Radius = self.PID1
+		cylinder3i.Height = self.L3
+		cylinder3i.Placement.Base = App.Vector(0,0,cylinder1i.Height)
+		cylinder2i = self.document.addObject("Part::Cylinder","Cylinder2i")
+		cylinder2i.Radius = self.POD2
+		cylinder2i.Height = self.L2
+		cylinder2i.Placement.Base = App.Vector(0,0,cylinder1i.Height+cylinder3i.Height)
+		inner = document.addObject("Part::MultiFuse","InnerParts")
+		inner.Shapes = [cylinder1i, cylinder3i, cylinder2i]
+		return inner
+	def createInnerPartReduced(self):
 		""" Create a outer part which is cylinder+cone+cylinder."""
 		#inner_cylinder1.Placement.Base = App.Vector(0,0, -inner_cylinder1.Height)
 		# Create parts which must be removed from the cone.
@@ -438,4 +478,3 @@ def TestTable():
 #TestTable()
 #document.recompute()
 form = GuiCoupling(table)
-
