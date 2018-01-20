@@ -180,16 +180,14 @@ class Coupling:
 		return outer
 
 	def createInnerPart(self):
+		# Create parts which must be removed from the coupling.
 		if self.PID1 == self.PID2:
 			return self.createInnerPartEqual()
 		else:
-			return self.createOuterPartEqual()
+			return self.createInnerPartReduced()
 
 	def createInnerPartEqual(self):
 		""" Create inner part from cylinders. This is when PID1 and PID2 are the same"""
-		""" Create a outer part which is cylinder+cone+cylinder."""
-		#inner_cylinder1.Placement.Base = App.Vector(0,0, -inner_cylinder1.Height)
-		# Create parts which must be removed from the cone.
 		cylinder1i = self.document.addObject("Part::Cylinder","Cylinder1i")
 		cylinder1i.Radius = self.POD1
 		cylinder1i.Height = self.L1
@@ -204,10 +202,9 @@ class Coupling:
 		inner = document.addObject("Part::MultiFuse","InnerParts")
 		inner.Shapes = [cylinder1i, cylinder3i, cylinder2i]
 		return inner
+
 	def createInnerPartReduced(self):
 		""" Create a outer part which is cylinder+cone+cylinder."""
-		#inner_cylinder1.Placement.Base = App.Vector(0,0, -inner_cylinder1.Height)
-		# Create parts which must be removed from the cone.
 		cylinder1i = self.document.addObject("Part::Cylinder","Cylinder1i")
 		cylinder1i.Radius = self.POD1
 		cylinder1i.Height = self.L1
@@ -475,6 +472,9 @@ def TestTable():
 		coupling.create(partName, True)
 		document.recompute()
 
-#TestTable()
-#document.recompute()
-form = GuiCoupling(table)
+#coupling = CouplingFromTable(document, table)
+#coupling.create("429-212", False)
+
+TestTable()
+document.recompute()
+#form = GuiCoupling(table)
