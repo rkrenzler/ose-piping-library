@@ -21,7 +21,7 @@ import Part
 tu = FreeCAD.Units.parseQuantity
 
 class CsvTable:
-	""" Read elbow dimensions from a csv file"""
+	""" Read coupling dimensions from a csv file"""
 	def __init__(self):
 		self.headers = []
 		self.data = []
@@ -41,7 +41,7 @@ class CsvTable:
 			self.hasValidData = self.hasNecessaryColumns()
 
 	def hasNecessaryColumns(self):
-		""" Check if the data contains all calumns required to create an elbow."""
+		""" Check if the data contains all calumns required to create a coupling."""
 		return all(h in self.headers for h in ["Name", "POD", "PID", "POD1", "PID1", "L", "M", "M1", "N"])
 
 	def findPart(self, name):
@@ -240,6 +240,167 @@ class CouplingFromTable:
 		coupling.L3 = tu(row["N"]) # Lenght of the intemidate section of the coupling.
 
 		return coupling.create(convertToSolid)
+
+
+class PartTableModel(QtCore.QAbstractTableModel): 
+	def __init__(self, headers, data, parent=None, *args):
+		self.headers = headers
+		self.table_data = data
+		QtCore.QAbstractTableModel.__init__(self, parent, *args) 
+	
+	def rowCount(self, parent): 
+		return len(self.table_data) 
+ 
+	def columnCount(self, parent):
+		return len(self.headers) 
+ 
+	def data(self, index, role):
+		if not index.isValid(): 
+			return None
+		elif role != QtCore.Qt.DisplayRole: 
+			return None
+		return self.table_data[index.row()][index.column()] 
+
+	def getPartName(self, rowIndex):
+		name_index = self.headers.index("Name")
+		return self.table_data[rowIndex][name_index]
+
+	def getPartRowIndex(self, partName):
+		""" Return row index of the part with name partName.
+		:param :partName name of the part
+		:return: index of the first row whose part name is equal to partName
+				return -1 if no row find.
+		"""
+		name_index = self.headers.index("Name")
+		for row_i in range(name_index, len(self.table_data)):
+			if self.table_data[row_i][name_index] == partName:
+				return row_i
+		return -1
+	def headerData(self, col, orientation, role):
+		if orientation ==QtCore. Qt.Horizontal and role == QtCore.Qt.DisplayRole:
+			return self.headers[col]
+		return None
+
+class GuiCoupling(QtGui.QDialog):
+	QSETTINGS_APPLICATION = "OSE piping freecad macros"
+	QSETTINGS_NAME = "coupling user input"
+	def __init__(self, table):
+		super(GuiCoupling, self).__init__()
+		self.table = table
+		self.initUi()
+	def initUi(self): 
+		Dialog = self # Added 
+		self.result = -1 
+		self.setupUi(self)
+		# Fill table with dimensions. 
+		self.initTable()
+
+		# Restore previous user input. Ignore exceptions to prevent this part
+		# part of the code to prevent GUI from starting, once settings are broken.
+		try:
+			self.restoreInput()
+		except Exception as e:
+			print ("Could not restore old user input!")
+			print(e)
+		self.show()
+
+# The following lines are from QtDesigner .ui-file processed by pyside-uic
+# pyside-uic --indent=0 create-coupling.ui -o tmp.py
+#
+# The file paths needs to be adjusted manually. For example
+# self.label.setPixmap(QtGui.QPixmap(App.ConfigGet("UserAppData")+"coupling-dimensions.png"))
+# access datata in some special FreeCAD directory.
+	def setupUi(self, Dialog):
+		Dialog.setObjectName("Dialog")
+		Dialog.resize(650, 577)
+		self.buttonBox = QtGui.QDialogButtonBox(Dialog)
+		self.buttonBox.setGeometry(QtCore.QRect(310, 530, 301, 32))
+		self.buttonBox.setOrientation(QtCore.Qt.Horizontal)
+		self.buttonBox.setStandardButtons(QtGui.QDialogButtonBox.Cancel|QtGui.QDialogButtonBox.Ok)
+		self.buttonBox.setObjectName("buttonBox")
+		self.tableViewParts = QtGui.QTableView(Dialog)
+		self.tableViewParts.setGeometry(QtCore.QRect(10, 40, 631, 192))
+		self.tableViewParts.setSelectionMode(QtGui.QAbstractItemView.SingleSelection)
+		self.tableViewParts.setSelectionBehavior(QtGui.QAbstractItemView.SelectRows)
+		self.tableViewParts.setObjectName("tableViewParts")
+		self.checkBoxCreateSolid = QtGui.QCheckBox(Dialog)
+		self.checkBoxCreateSolid.setGeometry(QtCore.QRect(10, 10, 171, 22))
+		self.checkBoxCreateSolid.setChecked(True)
+		self.checkBoxCreateSolid.setObjectName("checkBoxCreateSolid")
+		self.label = QtGui.QLabel(Dialog)
+		self.label.setGeometry(QtCore.QRect(10, 240, 621, 281))
+		self.label.setText("")
+		self.label.setPixmap(QtGui.QPixmap(App.ConfigGet("UserAppData")+"coupling-dimensions.png"))
+		self.label.setObjectName("label")
+
+		self.retranslateUi(Dialog)
+		QtCore.QObject.connect(self.buttonBox, QtCore.SIGNAL("accepted()"), Dialog.accept)
+		QtCore.QObject.connect(self.buttonBox, QtCore.SIGNAL("rejected()"), Dialog.reject)
+		QtCore.QMetaObject.connectSlotsByName(Dialog)
+
+	def retranslateUi(self, Dialog):
+		Dialog.setWindowTitle(QtGui.QApplication.translate("Dialog", "Create coupling", None, QtGui.QApplication.UnicodeUTF8))
+		self.checkBoxCreateSolid.setText(QtGui.QApplication.translate("Dialog", "Create Solid", None, QtGui.QApplication.UnicodeUTF8))
+
+	def initTable(self):
+		# Read table data from CSV
+		self.model = PartTableModel(self.table.headers, self.table.data)
+		self.tableViewParts.setModel(self.model)
+		
+	def getSelectedPartName(self):
+		sel = form.tableViewParts.selectionModel()
+		if sel.isSelected:
+			if len(sel.selectedRows())> 0:
+				rowIndex = sel.selectedRows()[0].row()
+				return self.model.getPartName(rowIndex)
+		return None
+
+	def selectPartByName(self, partName):
+		"""Select first row with a part with a name partName."""
+		if partName is not None:
+			row_i = self.model.getPartRowIndex(partName)
+			if row_i >= 0:
+				self.tableViewParts.selectRow(row_i)
+
+	def accept(self):
+		"""User clicked OK"""
+		# Update active document.  If there is none, show a warning message and do nothing.
+		document = App.activeDocument()
+		if document is not None:
+		# Get suitable row from the the table.
+			partName = self.getSelectedPartName()
+			createSolid = self.checkBoxCreateSolid.isChecked()
+			if partName is not None:
+				coupling = CouplingFromTable(document, self.table)
+				coupling.create(partName, createSolid)
+				document.recompute()
+				# Save user input for the next dialog call.
+				self.saveInput()
+				# Call parent class.
+				super(GuiCoupling, self).accept()
+			else:
+				msgBox = QtGui.QMessageBox()
+				msgBox.setText("Select part")
+				msgBox.exec_()
+		else:
+			text = "I have not found any active document were I can create a coupling.\n"\
+				"Use menu File->New to create a new document first, "\
+				"then try to create the coupling again."
+			msgBox = QtGui.QMessageBox(QtGui.QMessageBox.Warning, "Creating of the coupling failed.", text)
+			msgBox.exec_()
+	def saveInput(self):
+		"""Store user input for the next run."""
+		settings = QtCore.QSettings(GuiCoupling.QSETTINGS_APPLICATION, GuiCoupling.QSETTINGS_NAME)
+		check = self.checkBoxCreateSolid.checkState()
+		settings.setValue("checkBoxCreateSolid", int(check))
+		settings.setValue("LastSelectedPartName", self.getSelectedPartName())
+		settings.sync()
+	def restoreInput(self):
+		settings = QtCore.QSettings(GuiCoupling.QSETTINGS_APPLICATION, GuiCoupling.QSETTINGS_NAME)
+		checkState = QtCore.Qt.CheckState(int(settings.value("checkBoxCreateSolid")))
+		self.checkBoxCreateSolid.setCheckState(checkState)
+		self.selectPartByName(settings.value("LastSelectedPartName"))
+
 		
 document = App.activeDocument()
 
@@ -274,5 +435,7 @@ def TestTable():
 		coupling.create(partName, True)
 		document.recompute()
 
-TestTable()
-document.recompute()
+#TestTable()
+#document.recompute()
+form = GuiCoupling(table)
+
