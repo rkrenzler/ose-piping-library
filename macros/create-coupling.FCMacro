@@ -285,7 +285,9 @@ class CouplingFromTable:
 		coupling.L2 = coupling.L1 # Length of the socket2.
 		coupling.L3 = tu(row["N"]) # Lenght of the intemidate section of the coupling.
 
-		return coupling.create(convertToSolid)
+		part = coupling.create(convertToSolid)
+		part.Label = partName
+		return part
 
 
 class PartTableModel(QtCore.QAbstractTableModel): 
