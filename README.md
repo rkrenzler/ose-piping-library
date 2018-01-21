@@ -21,8 +21,14 @@ Linux:
 creates
 ![90°-elbow CAD screenshot](doc/pvc-elbow-90-cad-screenshot.png).
 
-### alpha°-elbow ### 
+### alpha°-Elbow ### 
 Create an arbitrary elbow with the angle alpha within the range of 0°-180°.
 ![alpha°-elbow dialog](doc/pvc-elbow-alpha-gui-screenshot.png)
 creates
 ![alpha°-elbow CAD](doc/pvc-elbow-alpha-cad-screenshot.png).
+
+### Tee ### 
+Create an arbitrary elbow with the angle alpha within the range of 0°-180°.
+![create-tee dialog](doc/pvc-tee-gui-screenshot.png)
+creates
+![tee CAD](doc/pvc-tee-cad-screenshot.png).
