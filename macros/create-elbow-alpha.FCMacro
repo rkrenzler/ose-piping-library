@@ -41,7 +41,16 @@ class CsvTable:
 			self.headers = csv_reader.next()
 			# Fill the talble
 			self.data = []
+			names = []
+			ni = self.headers.index("Name")
 			for row in csv_reader:
+				# Check if the name is unique
+				name = row[ni]
+				if name in names:
+					print('Error: Not unique name "%s" found in %s'%(name, filename))
+					exit(1)
+				else:
+					names.append(name)
 				self.data.append(row)
 			csvfile.close() # Should I close this file explicitely?
 			self.hasValidData = self.hasNecessaryColumns()
@@ -361,37 +370,38 @@ class GuiElbowAlpha(QtGui.QDialog):
 # access datata in some special FreeCAD directory.
 	def setupUi(self, Dialog):
 		Dialog.setObjectName("Dialog")
-		Dialog.resize(619, 477)
-		self.buttonBox = QtGui.QDialogButtonBox(Dialog)
-		self.buttonBox.setGeometry(QtCore.QRect(310, 440, 301, 32))
-		self.buttonBox.setOrientation(QtCore.Qt.Horizontal)
-		self.buttonBox.setStandardButtons(QtGui.QDialogButtonBox.Cancel|QtGui.QDialogButtonBox.Ok)
-		self.buttonBox.setObjectName("buttonBox")
+		Dialog.resize(682, 515)
+		self.verticalLayout = QtGui.QVBoxLayout(Dialog)
+		self.verticalLayout.setObjectName("verticalLayout")
+		self.checkBoxCreateSolid = QtGui.QCheckBox(Dialog)
+		self.checkBoxCreateSolid.setChecked(True)
+		self.checkBoxCreateSolid.setObjectName("checkBoxCreateSolid")
+		self.verticalLayout.addWidget(self.checkBoxCreateSolid)
 		self.tableViewParts = QtGui.QTableView(Dialog)
-		self.tableViewParts.setGeometry(QtCore.QRect(10, 40, 601, 192))
 		self.tableViewParts.setSelectionMode(QtGui.QAbstractItemView.SingleSelection)
 		self.tableViewParts.setSelectionBehavior(QtGui.QAbstractItemView.SelectRows)
 		self.tableViewParts.setObjectName("tableViewParts")
-		self.checkBoxCreateSolid = QtGui.QCheckBox(Dialog)
-		self.checkBoxCreateSolid.setGeometry(QtCore.QRect(10, 10, 171, 22))
-		self.checkBoxCreateSolid.setChecked(True)
-		self.checkBoxCreateSolid.setObjectName("checkBoxCreateSolid")
+		self.verticalLayout.addWidget(self.tableViewParts)
 		self.label = QtGui.QLabel(Dialog)
-		self.label.setGeometry(QtCore.QRect(110, 240, 401, 191))
 		self.label.setText("")
 		self.label.setPixmap(QtGui.QPixmap(App.ConfigGet("UserAppData")+"alpha-deg-elbow-dimensions.png"))
+		self.label.setAlignment(QtCore.Qt.AlignCenter)
 		self.label.setObjectName("label")
+		self.verticalLayout.addWidget(self.label)
+		self.buttonBox = QtGui.QDialogButtonBox(Dialog)
+		self.buttonBox.setOrientation(QtCore.Qt.Horizontal)
+		self.buttonBox.setStandardButtons(QtGui.QDialogButtonBox.Cancel|QtGui.QDialogButtonBox.Ok)
+		self.buttonBox.setObjectName("buttonBox")
+		self.verticalLayout.addWidget(self.buttonBox)
 
 		self.retranslateUi(Dialog)
 		QtCore.QObject.connect(self.buttonBox, QtCore.SIGNAL("accepted()"), Dialog.accept)
 		QtCore.QObject.connect(self.buttonBox, QtCore.SIGNAL("rejected()"), Dialog.reject)
 		QtCore.QMetaObject.connectSlotsByName(Dialog)
 
-# The following lines are from QtDesigner .ui-file processed by pyside-uic
 	def retranslateUi(self, Dialog):
 		Dialog.setWindowTitle(QtGui.QApplication.translate("Dialog", "Create alpha° elbow", None, QtGui.QApplication.UnicodeUTF8))
 		self.checkBoxCreateSolid.setText(QtGui.QApplication.translate("Dialog", "Create Solid", None, QtGui.QApplication.UnicodeUTF8))
-
 	def initTable(self):
 		# Read table data from CSV
 		self.model = PartTableModel(self.table.headers, self.table.data)
