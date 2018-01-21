@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 # Author: Ruslan Krenzler.
-# Date: 16 December 2017
+# Date: 21 Januar 2018
 # Create a tee-fitting.
-# Version 0.2
+# Version 0.3
 
 import math
 
@@ -13,7 +13,6 @@ import Sketcher
 import Part
 
 
-document = App.activeDocument()
 tu = FreeCAD.Units.parseQuantity
 
 # The value RELATIVE_EPSILON is used to slightly change the size of a subtracted part
@@ -22,130 +21,26 @@ tu = FreeCAD.Units.parseQuantity
 # If the original value is L then we often use the value L*(1+RELATIVE_EPSILON) instead.
 # The relative deviation is then (L*(1+RELATIVE_EPSILON)-L)/L = RELATIVE_EPSILON.
 # That is why the constant has "relative" in its name.
+# On my version of freecad 0.16 The macro works even with RELATIVE_EPSILON = 0.0.
+# Maybe there is no more problems with boolean operations.
 RELATIVE_EPSILON = 0.1
 
-NPS_NAME_COLUMN_INDEX = 0
-NPS_SCHEDULE_COLUMN_INDEX = 1
-NPS_OUTER_DIAMETER_COLUMN_INDEX = 2
-NPS_INNER_DIAMETER_COLUMN_INDEX = 3
-
-# Source: http://opensourceecology.org/wiki/PVC_Pipe
-
-NPS_PVC_TABLE = [
-	['1/8"', 40, 0.405,0.249,0.068,0.051,810],
-	['1/4"', 40, 0.540,0.344,0.088, 0.086, 780],
-	['3/8"', 40, 0.675, 0.473, 0.091, 0.115, 620],
-	['1/2"', 40, 0.840, 0.602, 0.109, 0.170, 600],
-	['3/4"', 40, 1.050, 0.804, 0.113, 0.226, 480],
-	['1"', 40, 1.315, 1.029, 0.133, 0.333, 450],
-	['1-1/4"', 40, 1.660, 1.360, 0.140, 0.450, 370],
-	['1-1/2"', 40, 1.900, 1.590, 0.145, 0.537, 330],
-	['2"', 40, 2.375, 2.047, 0.154, 0.720, 280],
-	['2-1/2"', 40, 2.875, 2.445, 0.203, 1.136, 300],
-	['3"', 40, 3.500, 3.042, 0.216, 1.488, 260],
-	['3-1/2"', 40, 4.000, 3.521, 0.226, 1.789, 240],
-	['4"', 40, 4.500, 3.998, 0.237, 2.118, 220],
-	['5"', 40, 5.563, 5.016, 0.258, 2.874, 190],
-	['6"', 40, 6.625, 6.031, 0.280, 3.733, 180],
-	['8"', 40, 8.625, 7.942, 0.322, 5.619, 160],
-	['10"', 40, 10.750, 9.976, 0.365, 7.966, 140],
-	['12"', 40, 12.750, 11.889, 0.406, 10.534, 130],
-	['1/8"',80, .405, .195, 0.095, 0.063, 1230],
-	['1/4"',80, .540, .282, 0.119, 0.105, 1130],
-	['3/8"',80, .675, .403, 0.126, 0.146, 920],
-	['1/2"',80, .840, .526, 0.147, 0.213, 850],
-	['3/4"',80, 1.050, .722, 0.154, 0.289, 690],
-	['1"',80, 1.315, .936, 0.179, 0.424, 630],
-	['1-1/4"',80, 1.660, 1.255, 0.191, 0.586, 520],
-	['1-1/2"',80, 1.900, 1.476, 0.200, 0.711, 470],
-	['2"',80, 2.375,1.913, 0.218, 0.984, 400],
-	['2-1/2"',80, 2.875, 2.290, 0.276, 1.500, 420],
-	['3"',80, 3.500, 2.864, 0.300, 2.010, 370],
-	['3-1/2"',80, 4.000, 3.326, 0.318, 2.452, 350],
-	['4"',80, 4.500, 3.786, 0.337, 2.938, 320],
-	['5"',80, 5.563, 4.768, 0.375, 4.078, 290],
-	['6"',80, 6.625, 5.709, 0.432, 5.610, 280],
-	['8"',80, 8.625, 7.565, 0.500, 8.522, 250],
-	['10"',80, 10.750, 9.493, 0.593, 12.635, 230],
-	['12"',80 ,12.750, 11.294, 0.687, 17.384, 230]]
-
-TEE_PART_NAME_COLUMN_INDEX = 0
-TEE_PIPE_SIZE_NAME_COLUMN_INDEX = 1
-TEE_SCHEDULE_COLUMN_INDEX = 2
-TEE_G_COLUMN_INDEX = 3
-TEE_G1_COLUMN_INDEX = 4
-TEE_H_COLUMN_INDEX = 5
-TEE_H1_COLUMN_INDEX = 6
-TEE_L_COLUMN_INDEX = 7
-TEE_M_COLUMN_INDEX = 8
-TEE_WEIGHT_COLUMN_INDEX = 9 # LBS, Not used now
-
-# The headers are used by the GUI.
-TEE_TABLE_HEADERS =["Part name", "Size", "Schedule", "G", "G1", "H", "H1", "M", "Weights LBS"]
-
-TEE_TABLE = [['401-003', '3/8"', 40, 3/8.0, 3/8.0, 1+1/8.0, 1+1/8.0, 2+1/4.0, 31/32.0, .04],
-['401-005', '1/2"', 40, 1/2.0, 1/2.0, 1+1/4.0, 1+1/4.0, 2+1/2.0, 1+3/32.0, .06],
-['401-007', '3/4"', 40, 9/16.0, 9/16.0, 1+9/16.0, 1+9/16.0, 3+1/8.0, 1+5/16.0, .10],
-['401-010', '1"', 40, 11/16.0, 11/16.0, 1+3/4.0, 1+3/4.0, 3+1/2.0, 1+5/8.0, .16],
-['401-012', '1-1/4"', 40, 7/8.0, 7/8.0, 2+1/8.0, 2+1/8.0, 4+1/4.0, 2, .25],
-['401-015', '1-1/2"', 40, 1+1/16.0, 1+1/16.0, 2+3/8.0, 2+3/8.0, 4+3/4.0, 2+1/4.0, .33],
-['401-020', '2"', 40, 1+3/8.0, 1+3/8.0, 2+3/4.0, 2+3/4.0, 5+1/2.0, 2+3/4.0, .51],
-['401-025', '2-1/2"', 40, 1+21/32.0, 1+21/32.0, 3+13/32.0, 3+13/32.0, 6+13/16.0, 3+11/32.0, 1.03],
-['401-030', '3"', 40, 1+15/16.0, 1+15/16.0, 3+27/32.0, 3+27/32.0, 7+11/16.0, 4, 1.43],
-['401-040', '4"', 40, 2+13/32.0, 2+13/32.0, 4+7/16.0, 4+7/16.0, 8+7/8.0, 5+1/32.0, 2.22],
-['401-050', '5"', 40, 3, 3, 6, 6, 12, 6+5/32.0, 4.59],
-['401-060', '6"', 40, 3+5/8.0, 3+5/8.0, 6+21/32.0, 6+21/32.0, 13+5/16.0, 7+9/32.0, 6.00],
-['401-080', '8"', 40, 4+1/2.0, 4+1/2.0, 8+17/32.0, 8+17/32.0, 17+1/16.0, 9+3/8.0, 11.81],
-['401-100', '10"', 40, 5+13/16.0, 5+13/16.0, 10+27/32.0, 10+27/32.0, 21+11/16.0, 11+21/32.0, 24.25],
-['401-100F', '10"', 40, 9+7/8.0, 9+3/8.0, 15+1/8.0, 14+5/8.0, 30+1/4.0, 11+1/2.0, 36.21],
-['401-120', '12"', 40, 6+27/32.0, 6+27/32.0, 12+27/32.0, 12+27/32.0, 25+11/16.0, 13+3/4.0, 37.94],
-['401-120F', '12"', 40, 10+3/4.0, 10+3/16.0, 17, 16+7/16.0, 34, 13+9/16.0, 56.32],
-# For following lines there are no pipe dimensions.
-#['401-140', '14"', 40, 7+1/32.0, 7+1/32.0, 14+7/32.0, 14+1/32.0, 28+7/16.0, 15+21/32.0, 64.02],
-#['401-140F', '14"', 40, 11+3/8.0, 11, 18+3/8.0, 18, 36+3/4.0, 14+7/8.0, 75.11],
-#['401-160F', '16"', 40, 15, 12+7/8.0, 23, 20+7/8.0, 46, 17, 111.00],
-#['401-180F', '18"', 40, 15+7/8.0, 13+3/8.0, 24+7/8.0, 22+3/8.0, 49+3/4.0, 19+1/8.0, 151.26],
-#['401-200F', '20"', 40, 18+1/4.0, 15+1/2.0, 28+1/4.0, 25+1/2.0, 56+1/2.0, 21+3/16.0, 206.74],
-#['401-240F', '24"', 40, 21+1/8.0, 17+1/2.0, 33+1/8.0, 29+1/2.0, 66+1/4.0, 25+3/8.0, 337.03],
-['801-002', '1/4"', 80, 5/16.0, 5/16.0, 31/32.0, 31/32.0, 1+15/16.0, 27/32.0, .04],
-['801-003', '3/8"', 80, 15/32.0, 15/32.0, 1+1/4.0, 1+1/4.0, 2+1/2.0, 31/32.0, .06],
-['801-005', '1/2"', 80, 19/32.0, 19/32.0, 1+15/32.0, 1+15/32.0, 2+15/16.0, 1+3/16.0, .11],
-['801-007', '3/4"', 80, 21/32.0, 21/32.0, 1+11/16.0, 1+11/16.0, 3+13/32.0, 1+13/32.0, .16],
-['801-010', '1"', 80, 7/8.0, 7/8.0, 2, 2, 4, 1+3/4.0, .27],
-['801-012', '1-1/4"', 80, 1+1/32.0, 1+1/32.0, 2+9/32.0, 2+9/32.0, 4+19/32.0, 2+3/32.0, .39],
-['801-015', '1-1/2"', 80, 1+3/16.0, 1+3/16.0, 2+9/32.0, 2+9/32.0, 5+1/8.0, 2+3/8.0, .52],
-['801-020', '2"', 80, 1+7/16.0, 1+7/16.0, 2+15/16.0, 2+15/16.0, 5+7/8.0, 2+7/8.0, .80],
-['801-025', '2-1/2"', 80, 1+3/4.0, 1+3/4.0, 3+1/2.0, 3+1/2.0, 7+1/32.0, 3+15/32.0, 1.46],
-['801-030', '3"', 80, 2+1/16.0, 2+1/16.0, 3+31/32.0, 3+31/32.0, 7+15/16.0, 4+5/32.0, 2.16],
-['801-040', '4"', 80, 2+1/2.0, 2+1/2.0, 4+3/4.0, 4+3/4.0, 9+1/2.0, 5+1/4.0, 3.52],
-['801-050', '5"', 80, 3+1/8.0, 3+1/8.0, 5+25/32.0, 5+25/32.0, 11+5/8.0, 6+13/32.0, 6.03],
-['801-050F', '5"', 80, 5+1/2.0, 5+1/2.0, 8+1/2.0, 8+1/2.0, 17, 6+5/16.0, 13.26],
-['801-060', '6"', 80, 3+25/32.0, 3+25/32.0, 6+13/16.0, 6+13/16.0, 13+5/8.0, 7+5/8.0, 10.78],
-['801-080', '8"', 80, 4+13/16.0, 4+13/16.0, 8+7/8.0, 8+7/8.0, 17+3/4.0, 9+23/32.0, 21.21],
-['801-080F', '8"', 80, 7+5/8.0, 7+5/8.0, 11+7/8.0, 11+7/8.0, 23+3/4.0, 9+5/8.0, 22.84],
-['801-100', '10"', 80, 5+15/16.0, 5+29/32.0, 10+29/32.0, 10+29/32.0, 21+13/16.0, 12+13/16.0, 35.83],
-['801-100F', '10"', 80, 9, 9, 14+1/4.0, 14+1/4.0, 28+1/2.0, 11+15/16.0, 39.82],
-['801-120', '12"', 80, 6+15/16.0, 6+15/16.0, 12+15/16.0, 12+15/16.0, 25+7/8.0, 14+1/4.0, 54.45],
-['801-120F', '12"', 80, 11+1/4.0, 11+1/4.0, 17+1/2.0, 17+1/2.0, 35, 14+1/8.0, 67.13]]
-# For following lines there are no pipe dimensions.
-#['801-140', '14"', 80, 7+1/32.0, 7+1/32.0, 14+7/32.0, 14+1/32.0, 28+7/16.0, 15+21/32.0, 63.61],
-#['801-140F', '14"', 80, 12+1/4.0, 12+1/4.0, 19+1/4.0, 19+1/4.0, 38+1/2.0, 15+1/2.0, 103.37],
-#['801-160F', '16"', 80, 13, 13, 21, 21, 42, 17+11/16.0, 144.87],
-#['801-180F', '18"', 80, 13+3/4.0, 13+3/4.0, 22+3/4.0, 22+3/4.0, 45+1/2.0, 19+7/8.0, 182.75],
-#['801-200F', '20"', 80, 16+3/8.0, 16+3/8.0, 26+3/8.0, 26+3/8.0, 52+3/4.0, 22+1/16.0, 284.24],
-#['801-240F', '24"', 80, 20+1/4.0, 20+1/4.0, 32+1/4.0, 32+1/4.0, 64+1/2.0, 26+7/16.0, 335.00]]
 class Tee:
 	def __init__(self, document):
 		self.document = document
-		# fill data with test values
-		self.G = tu("3/8 in")
-		self.G1 = tu("3/8 in")
-		self.H = tu("1+1/8 in") # It is L/2 for symetrical Tee. Why extra dimension?
-		self.H1 = tu("1+1/8 in")
-		self.L = tu("2+1/4 in")
-		self.M = tu("31/32 in")
-		self.innerD =  tu("0.473 in")
-		self.socketD = tu("0.675 in")
+		# Fill data with test values
+		self.G = tu("3 in")
+		self.G1 = tu("3 in")
+		self.G2 = tu("3 in")
+		self.H = tu("4 in") # It is L/2 for symetrical Tee. Why extra dimension?
+		self.H1 = tu("5 in")
+		self.H2 = tu("6 in")
+		self.PID = tu("2 in")
+		self.PID1 = tu("1 in")
+		self.POD = tu("3 in")
+		self.POD1 = tu("2 in")
+		self.M = tu("5 in")
+		self.M1 = tu("4 in")
 
 	@staticmethod
 	def toSolid(document, part, name):
@@ -171,23 +66,24 @@ class Tee:
 		return res
 
 	def create(self, convertToSolid):
+		L = self.H+self.H2
 		vertical_outer_cylinder = self.document.addObject("Part::Cylinder","VerticalOuterCynlider")
-		vertical_outer_cylinder.Radius = self.M/2
+		vertical_outer_cylinder.Radius = self.M1/2
 		vertical_outer_cylinder.Height = self.H1
 		vertical_inner_cylinder = self.document.addObject("Part::Cylinder","VerticalInnerCynlider")
-		vertical_inner_cylinder.Radius = self.innerD/2
+		vertical_inner_cylinder.Radius = self.PID1/2
 		vertical_inner_cylinder.Height =self.H1 * (1+RELATIVE_EPSILON)
 		
 		horizontal_outer_cylinder = self.document.addObject("Part::Cylinder","HorizontalOuterCynlider")
 		horizontal_outer_cylinder.Radius = self.M/2
-		horizontal_outer_cylinder.Height = self.L
+		horizontal_outer_cylinder.Height = L
 		# I do not understand the logic here. Why when I use GUI the vector is App.Vector(0,0,-L/2)
 		# and with the macros it is App.Vector(-L/2,0,0). Differne systems?
-		horizontal_outer_cylinder.Placement = App.Placement(App.Vector(-horizontal_outer_cylinder.Height/2,0,0), App.Rotation(App.Vector(0,1,0),90), App.Vector(0,0,0))
+		horizontal_outer_cylinder.Placement = App.Placement(App.Vector(-self.H,0,0), App.Rotation(App.Vector(0,1,0),90), App.Vector(0,0,0))
 		horizontal_inner_cylinder = self.document.addObject("Part::Cylinder","HorizontalInnerCynlider")
-		horizontal_inner_cylinder.Radius = self.innerD/2
-		horizontal_inner_cylinder.Height = self.L*(1+2*RELATIVE_EPSILON)
-		horizontal_inner_cylinder.Placement = App.Placement(App.Vector(-horizontal_inner_cylinder.Height/2,0,0), App.Rotation(App.Vector(0,1,0),90), App.Vector(0,0,0))
+		horizontal_inner_cylinder.Radius = self.PID/2
+		horizontal_inner_cylinder.Height = L*(1+RELATIVE_EPSILON)
+		horizontal_inner_cylinder.Placement = App.Placement(App.Vector(-self.H*(1+RELATIVE_EPSILON),0,0), App.Rotation(App.Vector(0,1,0),90), App.Vector(0,0,0))
 		
 		# Fuse outer parts to a tee, fuse inner parts to a tee, substract both parts
 		outer_fusion = self.document.addObject("Part::MultiFuse","OuterTeeFusion")
@@ -198,19 +94,20 @@ class Tee:
 		basic_tee.Base = outer_fusion
 		basic_tee.Tool = inner_fusion
 		
-		# Remove place for suckets
+		# Remove place for sockets.
 		socket_left = self.document.addObject("Part::Cylinder","SocketLeft")
-		socket_left.Radius = self.socketD /2
-		socket_left.Height = (self.L/2 - self.G)*(1+RELATIVE_EPSILON)
+		socket_left.Radius = self.POD /2
+		socket_left.Height = (self.H-self.G)*(1+RELATIVE_EPSILON)
 		socket_left.Placement = App.Placement(App.Vector(-socket_left.Height - self.G,0,0), App.Rotation(App.Vector(0,1,0),90), App.Vector(0,0,0))
+#		socket_left.Placement = App.Placement(App.Vector(-(self.H-self.G),0,0), App.Rotation(App.Vector(0,1,0),90), App.Vector(0,0,0))
 		
 		socket_right = self.document.addObject("Part::Cylinder","SocketRight")
-		socket_right.Radius = self.socketD /2
-		socket_right.Height = (self.L/2 - self.G)*(1+RELATIVE_EPSILON)
-		socket_right.Placement = App.Placement(App.Vector(self.G,0,0), App.Rotation(App.Vector(0,1,0),90), App.Vector(0,0,0))
+		socket_right.Radius = self.POD /2
+		socket_right.Height = (self.H2-self.G2)*(1+RELATIVE_EPSILON)
+		socket_right.Placement = App.Placement(App.Vector(self.G2,0,0), App.Rotation(App.Vector(0,1,0),90), App.Vector(0,0,0))
 		
 		socket_top = self.document.addObject("Part::Cylinder","SocketTop")
-		socket_top.Radius = self.socketD /2
+		socket_top.Radius = self.POD1 /2
 		socket_top.Height = (self.H1 - self.G1)*(1+RELATIVE_EPSILON)
 		socket_top.Placement = App.Placement(App.Vector(0,0,self.G1), App.Rotation(App.Vector(0,1,0),0), App.Vector(0,0,0))
 		
@@ -244,211 +141,8 @@ class Tee:
 			return solid
 		return tee
 
-# Create a part with dimensions from NPS_PVC_TABLE and TEE_TABLE.
-class TeeFromTable:
-	def __init__ (self, document):
-		self.document = document
-	@staticmethod
-	def findPipeDimensions(npsPipeSizeName, schedule):
-		"""Returns single row or None"""
-		for row in NPS_PVC_TABLE:
-			if row[NPS_NAME_COLUMN_INDEX]==npsPipeSizeName	and row[NPS_SCHEDULE_COLUMN_INDEX]==schedule:
-				return row
-		return None
-
-	@staticmethod
-	def findPart(partName):
-		for row in TEE_TABLE:
-			if row[TEE_PART_NAME_COLUMN_INDEX]==partName:
-				return row
-		return row
-
-	def create(self, partName, convertToSolid = True):
-		tee = Tee(self.document)
-		row = TeeFromTable.findPart(partName)
-		if row is None:
-			print("Part not found")
-			return
-		tee.G = tu("%f in"%row[TEE_G_COLUMN_INDEX])
-		tee.G1 = tu("%f in"%row[TEE_G1_COLUMN_INDEX])
-		tee.H = tu("%f in"%row[TEE_H_COLUMN_INDEX]) # It is L/2 for symetrical Tee. Why extra dimension?
-		tee.H1 = tu("%f in"%row[TEE_H1_COLUMN_INDEX])
-		tee.L = tu("%f in"%row[TEE_L_COLUMN_INDEX])
-		tee.M = tu("%f in"%row[TEE_M_COLUMN_INDEX])
-
-
-		# get pipe dimensions
-		pipe_dims =TeeFromTable.findPipeDimensions(row[TEE_PIPE_SIZE_NAME_COLUMN_INDEX],row[TEE_SCHEDULE_COLUMN_INDEX])
-
-		if pipe_dims is None:
-			print("No pipe dimensions found")
-			return
-
-		tee.socketD = tu("%f in"%pipe_dims[NPS_OUTER_DIAMETER_COLUMN_INDEX])
-		tee.innerD = tu("%f in"%pipe_dims[NPS_INNER_DIAMETER_COLUMN_INDEX])
-		return tee.create(convertToSolid)
-
-
-class PartTableModel(QtCore.QAbstractTableModel): 
-	def __init__(self, parent=None, *args): 
-		QtCore.QAbstractTableModel.__init__(self, parent, *args) 
-	
-	def rowCount(self, parent): 
-		return len(TEE_TABLE) 
- 
-	def columnCount(self, parent):
-		return len(TEE_TABLE_HEADERS) 
- 
-	def data(self, index, role):
-		if not index.isValid(): 
-			#return QtCore.QVariant() 
-			return None
-		elif role != QtCore.Qt.DisplayRole: 
-			#return QtCore.QVariant() 
-			return None
-		#return QtCore.QVariant(ELBOW_90_TABLE[index.row()][index.column()]) 
-		return TEE_TABLE[index.row()][index.column()] 
-
-	def getPartName(self, rowIndex):
-		return TEE_TABLE[rowIndex][TEE_PART_NAME_COLUMN_INDEX]
-
-	def getPartRowIndex(self, partName):
-		""" Return row indes of the part with name partName.
-		:param :partName name of the part
-		:return index of the first row whose part name is equal to partName
-				return -1 if no row find.
-		"""
-		for row_i in range(TEE_PART_NAME_COLUMN_INDEX, len(TEE_TABLE)):
-			if TEE_TABLE[row_i][TEE_PART_NAME_COLUMN_INDEX] == partName:
-				return row_i
-		return -1
-	def headerData(self, col, orientation, role):
-		if orientation ==QtCore. Qt.Horizontal and role == QtCore.Qt.DisplayRole:
-			return TEE_TABLE_HEADERS[col]
-		return None
-
-class GuiTee(QtGui.QDialog):
-	QSETTINGS_APPLICATION = "OSE piping freecad macros"
-	QSETTINGS_NAME = "tee user input"
-	"""Return index of the row in the NPC_PVC library.
-		Return -1 if nothing is selected.
-	"""
-	def __init__(self):
-		super(GuiTee, self).__init__()
-		self.initUi()
-	def initUi(self): 
-		Dialog = self # Added 
-		self.result = -1 
-		self.setupUi(self)
-		# Fill table with dimensions. 
-		self.initTable()
-
-		# Restore previous user input. Ignore exceptions to prevent this part
-		# part of the code to prevent GUI from starting, once settings are broken.
-		try:
-			self.restoreInput()
-		except Exception as e:
-			print ("Could not restore old user input!")
-			print(e)
-		self.show()
-
-# The following lines are from QtDesigner .ui-file processed by pyside-uic
-# pyside-uic --indent=0 ycreate-tee.ui -o tmp.py
-	def setupUi(self, Dialog):
-	# This code is from tmp.py.
-		Dialog.setObjectName("Dialog")
-		Dialog.resize(619, 277)
-		self.buttonBox = QtGui.QDialogButtonBox(Dialog)
-		self.buttonBox.setGeometry(QtCore.QRect(310, 240, 301, 32))
-		self.buttonBox.setOrientation(QtCore.Qt.Horizontal)
-		self.buttonBox.setStandardButtons(QtGui.QDialogButtonBox.Cancel|QtGui.QDialogButtonBox.Ok)
-		self.buttonBox.setObjectName("buttonBox")
-		self.tableViewParts = QtGui.QTableView(Dialog)
-		self.tableViewParts.setGeometry(QtCore.QRect(10, 40, 601, 192))
-		self.tableViewParts.setSelectionMode(QtGui.QAbstractItemView.SingleSelection)
-		self.tableViewParts.setSelectionBehavior(QtGui.QAbstractItemView.SelectRows)
-		self.tableViewParts.setObjectName("tableViewParts")
-		self.checkBoxCreateSolid = QtGui.QCheckBox(Dialog)
-		self.checkBoxCreateSolid.setGeometry(QtCore.QRect(10, 10, 171, 22))
-		self.checkBoxCreateSolid.setChecked(True)
-		self.checkBoxCreateSolid.setObjectName("checkBoxCreateSolid")
-
-		self.retranslateUi(Dialog)
-		QtCore.QObject.connect(self.buttonBox, QtCore.SIGNAL("accepted()"), Dialog.accept)
-		QtCore.QObject.connect(self.buttonBox, QtCore.SIGNAL("rejected()"), Dialog.reject)
-		QtCore.QMetaObject.connectSlotsByName(Dialog)
-
-	def retranslateUi(self, Dialog):
-		# Add data from tmp.py here.
-		Dialog.setWindowTitle(QtGui.QApplication.translate("Dialog", "Create Tee", None, QtGui.QApplication.UnicodeUTF8))
-		self.checkBoxCreateSolid.setText(QtGui.QApplication.translate("Dialog", "Create Solid", None, QtGui.QApplication.UnicodeUTF8))
-
-	def initTable(self):
-		self.model = PartTableModel()
-		self.tableViewParts.setModel(self.model)
-		
-	def getSelectedPartName(self):
-		sel = form.tableViewParts.selectionModel()
-		if sel.isSelected:
-			if len(sel.selectedRows())> 0:
-				rowIndex = sel.selectedRows()[0].row()
-				return self.model.getPartName(rowIndex)
-		return None
-
-	def selectPartByName(self, partName):
-		"""Select first row with a part with a name partName."""
-		if partName is not None:
-			row_i = self.model.getPartRowIndex(partName)
-			if row_i >= 0:
-				self.tableViewParts.selectRow(row_i)
-
-	def accept(self):
-		"""User clicked OK"""
-		# Update active document.  If there is none, show a warning message and do nothing.
-		document = App.activeDocument()
-		if document is not None:
-			# Get suitable row from the the table.
-			partName = self.getSelectedPartName()
-			createSolid = self.checkBoxCreateSolid.isChecked()
-			if partName is not None:
-				tee = TeeFromTable(document)
-				tee.create(partName, createSolid)
-				document.recompute()
-				# Save user input for the next dialog call.
-				self.saveInput()
-				# Call parent class.
-				super(GuiTee, self).accept()
-			else:
-				msgBox = QtGui.QMessageBox()
-				msgBox.setText("Select part")
-				msgBox.exec_()
-		else:
-			text = "I have not found any active document were I can create a tee.\n"\
-				"Use menu File->New to create a new document first, "\
-				"then try to create the tee again."
-			msgBox = QtGui.QMessageBox(QtGui.QMessageBox.Warning, "Creating of the ttee failed.", text)
-			msgBox.exec_()
-	def saveInput(self):
-		"""Store user input for the next run."""
-		settings = QtCore.QSettings(GuiTee.QSETTINGS_APPLICATION, GuiTee.QSETTINGS_NAME)
-		check = self.checkBoxCreateSolid.checkState()
-		settings.setValue("checkBoxCreateSolid", int(check))
-		settings.setValue("LastSelectedPartName", self.getSelectedPartName())
-		settings.sync()
-	def restoreInput(self):
-		settings = QtCore.QSettings(GuiTee.QSETTINGS_APPLICATION, GuiTee.QSETTINGS_NAME)
-		checkState = QtCore.Qt.CheckState(int(settings.value("checkBoxCreateSolid")))
-		self.checkBoxCreateSolid.setCheckState(checkState)
-		self.selectPartByName(settings.value("LastSelectedPartName"))
-
-def TestTable():
-	tee = TeeFromTable(document)
-	for row in TEE_TABLE:
-		partName = row[TEE_PART_NAME_COLUMN_INDEX]
-		print("Creating part %s",partName)
-		tee.create(partName, True)
-		document.recompute()
-
-#TestTable()
-form = GuiTee()
+document = App.activeDocument()
+tee = Tee(document)
+tee.create(False)
+document.recompute()
 
