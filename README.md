@@ -27,6 +27,13 @@ Create an arbitrary elbow with the angle alpha within the range of 0°-180°.
 creates
 ![alpha°-elbow CAD](doc/pvc-elbow-alpha-cad-screenshot.png).
 
+
+### Coupling ### 
+Create a centric coupling between two equal or different pipe sizes.
+![create coupling dialog](doc/pvc-coupling-gui-screenshot.png)
+creates
+![coupling CAD](doc/pvc-coupling-cad-screenshot.png).
+
 ### Tee ### 
 Create an arbitrary elbow with the angle alpha within the range of 0°-180°.
 ![create-tee dialog](doc/pvc-tee-gui-screenshot.png)
