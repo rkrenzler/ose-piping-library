@@ -161,7 +161,7 @@ class Coupling:
 		""" Create a outer part which is cylinder only. This is when M1 and M2 are the same"""
 		# Create socket 1.
 		outer = self.document.addObject("Part::Cylinder","Cylinder")
-		outer.Radius = self.M1
+		outer.Radius = self.M1/2
 		outer.Height = self.L1+self.L2+self.L3
 		return outer
 
@@ -169,18 +169,18 @@ class Coupling:
 		""" Create a outer part which is cylinder+cone+cylinder."""
 		# Create socket 1.
 		cylinder1 = self.document.addObject("Part::Cylinder","Cylinder1")
-		cylinder1.Radius = self.M1
+		cylinder1.Radius = self.M1/2
 		a1 = self.calculateShiftA2()
 		cylinder1.Height = self.L1+a1
 		# Create a cone and put it on the cylinder 1
 		cone = self.document.addObject("Part::Cone","Cone")
-		cone.Radius1 = self.M1
-		cone.Radius2 = self.M2
+		cone.Radius1 = self.M1/2
+		cone.Radius2 = self.M2/2
 		cone.Height = self.L3
 		cone.Placement.Base = App.Vector(0,0,cylinder1.Height)
 		# Create a socket 2 and put it on the cone 
 		cylinder2 = self.document.addObject("Part::Cylinder","Cylinder2")
-		cylinder2.Radius = self.M2
+		cylinder2.Radius = self.M2/2
 		cylinder2.Height = self.L2-a1
 		cylinder2.Placement.Base = App.Vector(0,0,cylinder1.Height+cone.Height)
 		# Combine all outer parts.
@@ -198,14 +198,14 @@ class Coupling:
 	def createInnerPartEqual(self):
 		""" Create inner part from cylinders. This is when PID1 and PID2 are the same"""
 		cylinder1i = self.document.addObject("Part::Cylinder","Cylinder1i")
-		cylinder1i.Radius = self.POD1
+		cylinder1i.Radius = self.POD1/2
 		cylinder1i.Height = self.L1
 		cylinder3i = self.document.addObject("Part::Cylinder","Cylinder3i")
-		cylinder3i.Radius = self.PID1
+		cylinder3i.Radius = self.PID1/2
 		cylinder3i.Height = self.L3
 		cylinder3i.Placement.Base = App.Vector(0,0,cylinder1i.Height)
 		cylinder2i = self.document.addObject("Part::Cylinder","Cylinder2i")
-		cylinder2i.Radius = self.POD2
+		cylinder2i.Radius = self.POD2/2
 		cylinder2i.Height = self.L2
 		cylinder2i.Placement.Base = App.Vector(0,0,cylinder1i.Height+cylinder3i.Height)
 		inner = document.addObject("Part::MultiFuse","InnerParts")
@@ -215,15 +215,15 @@ class Coupling:
 	def createInnerPartReduced(self):
 		""" Create a outer part which is cylinder+cone+cylinder."""
 		cylinder1i = self.document.addObject("Part::Cylinder","Cylinder1i")
-		cylinder1i.Radius = self.POD1
+		cylinder1i.Radius = self.POD1/2
 		cylinder1i.Height = self.L1
 		conei = self.document.addObject("Part::Cone","Cone")
-		conei.Radius1 = self.PID1
-		conei.Radius2 = self.PID2
+		conei.Radius1 = self.PID1/2
+		conei.Radius2 = self.PID2/2
 		conei.Height = self.L3
 		conei.Placement.Base = App.Vector(0,0,cylinder1i.Height)
 		cylinder2i = self.document.addObject("Part::Cylinder","Cylinder2i")
-		cylinder2i.Radius = self.POD2
+		cylinder2i.Radius = self.POD2/2
 		cylinder2i.Height = self.L2
 		cylinder2i.Placement.Base = App.Vector(0,0,cylinder1i.Height+conei.Height)
 		inner = document.addObject("Part::MultiFuse","InnerParts")
