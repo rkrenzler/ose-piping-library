@@ -256,7 +256,7 @@ class Elbow:
 				print("Deleting temporary objects %s."%name)
 				self.document.removeObject(name)
 			return solid
-		return elbow
+		return group
 
 class ElbowAlpha:
 	"""Create a symetrical alpha° elbow"""
@@ -297,7 +297,10 @@ class ElbowAlphaFromTable:
 
 		elbow.socketD = tu(row["POD"])
 		elbow.innerD = tu(row["PID"])
-		return elbow.create(convertToSolid)
+		part = elbow.create(convertToSolid)
+		part.Label = partName
+		return part
+
 
 class PartTableModel(QtCore.QAbstractTableModel): 
 	def __init__(self, headers, data, parent=None, *args):
