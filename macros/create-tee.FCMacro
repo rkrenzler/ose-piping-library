@@ -5,6 +5,8 @@
 # Version 0.3
 
 import math
+import csv
+import os.path
 
 from PySide import QtCore, QtGui
 import FreeCAD
@@ -14,6 +16,9 @@ import Part
 
 
 tu = FreeCAD.Units.parseQuantity
+# This is the path to the dimensions table
+CSV_TABLE_PATH = App.ConfigGet("UserAppData")+"tee.csv"
+
 
 # The value RELATIVE_EPSILON is used to slightly change the size of a subtracted part
 # to prevent problems with boolean operations.
@@ -24,6 +29,55 @@ tu = FreeCAD.Units.parseQuantity
 # On my version of freecad 0.16 The macro works even with RELATIVE_EPSILON = 0.0.
 # Maybe there is no more problems with boolean operations.
 RELATIVE_EPSILON = 0.1
+
+class CsvTable:
+	""" Read coupling dimensions from a csv file"""
+	def __init__(self):
+		self.headers = []
+		self.data = []
+		self.hasValidData = False
+
+	def load(self, filename):
+		"""Load data from a CSV file."""
+		self.hasValidData = False
+		with open(filename, "r") as csvfile:
+			csv_reader = csv.reader(csvfile, delimiter=',', quotechar='"')
+			self.headers = csv_reader.next()
+			# Fill the talble
+			self.data = []
+			names = []
+			ni = self.headers.index("Name")
+			for row in csv_reader:
+				# Check if the name is unique
+				name = row[ni]
+				if name in names:
+					print('Error: Not unique name "%s" found in %s'%(name, filename))
+					exit(1)
+				else:
+					names.append(name)
+				self.data.append(row)
+			csvfile.close() # Should I close this file explicitely?
+			self.hasValidData = self.hasNecessaryColumns()
+
+	def hasNecessaryColumns(self):
+		""" Check if the data contains all calumns required to create a coupling."""
+		return all(h in self.headers for h in ["Name", "POD", "PID", "POD1", "PID1", "G", "G1", "G2", "H", "H1", "H2", "M", "M1"])
+
+	def findPart(self, name):
+		"""Return first first raw with the particular part name as a dictionary."""
+		# First find out the index of the column "Name".
+		ci = self.headers.index("Name")
+		# Search for the first appereance of the name in this column.
+		for row in self.data:
+			if row[ci] == name:
+				# Convert row to dicionary.
+				return dict(zip(self.headers, row))
+		return None
+
+	def getPartName(self, index):
+		"""Return part name of a row with the index *index*."""
+		ci = self.headers.index("Name")
+		return self.data[index][ci]
 
 class Tee:
 	def __init__(self, document):
@@ -141,8 +195,73 @@ class Tee:
 			return solid
 		return tee
 
+class TeeFromTable:
+	"""Create a part with dimensions from a CSV table."""
+	def __init__ (self, document, table):
+		self.document = document
+		self.table = table
+	def create(self, partName, convertToSolid = True):
+		tee = Tee(self.document)
+		row = self.table.findPart(partName)
+		if row is None:
+			print("Part not found")
+			return
+		tee.G = tu(row["G"])
+		tee.G1 = tu(row["G1"])
+		tee.G2 = tu(row["G2"])
+		tee.H = tu(row["H"]) # It is L/2 for symetrical Tee. Why extra dimension?
+		tee.H1 = tu(row["H1"])
+		tee.H2 = tu(row["H2"])
+		tee.PID = tu(row["PID"])
+		tee.PID1 = tu(row["PID1"])
+		tee.POD = tu(row["POD"])
+		tee.POD1 = tu(row["POD1"])
+		tee.M = tu(row["M"])
+		tee.M1 = tu(row["M1"])
+
+		part = tee.create(convertToSolid)
+		part.Label = partName
+		return part
+
+
+# Before working with macros, try to load the dimension table.
+
+# Check if the CSV file exists.
+if os.path.isfile(CSV_TABLE_PATH) == False:
+	text = "This macro requires %s  but this file does not exist."%(CSV_TABLE_PATH)
+	msgBox = QtGui.QMessageBox(QtGui.QMessageBox.Warning, "Creating of the coupling failed.", text)
+	msgBox.exec_()
+	exit(1) # Error
+
+print("Trying to load CSV file with dimensions: %s"%CSV_TABLE_PATH) 
+table = CsvTable()
+table.load(CSV_TABLE_PATH)
+
+if table.hasValidData == False:
+	text = 'Invalid %s.\n'\
+		'It must contain columns "Name", "POD", "PID", "POD1", "PID1", "G", "G1", "G2", "H", "H1", "H2", "M" and "M1".'%(CSV_TABLE_PATH)
+	msgBox = QtGui.QMessageBox(QtGui.QMessageBox.Warning, "Creating of the tee failed.", text)
+	msgBox.exec_()
+	exit(1) # Error
+	
+# determine an active document
 document = App.activeDocument()
-tee = Tee(document)
-tee.create(False)
-document.recompute()
+
+# Test macros.
+def TestTee():
+	tee = Tee(document)
+	tee.create(False)
+	document.recompute()
+def TestTable():
+	tee = TeeFromTable(document, table)
+	for i in range(0, len(table.data)):
+		print("Selecting row %d"%i)
+		partName = table.getPartName(i)
+		print("Creating part %s"%partName)
+		part = tee.create(partName, True)
+		document.recompute()
+	document.recompute()
+# Create tee fitting.
+TestTable()
+
 
