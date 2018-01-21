@@ -90,15 +90,15 @@ class Coupling:
 	def __init__(self, document):
 		self.document = document
 		# Set default values.
-		self.M1 = tu("5 in") # Outer diameter of socket 1.
-		self.POD1 = tu("4 in") # Pipe outer diameter at the socket 1.
-		self.PID1 = tu("3 in") # Pipe inner diameter at the socket 1.
-		self.L1 = tu("4 in") # Length of the socket1.
-		self.M2 = tu("3 in") # Outer diameter of socket 2.
-		self.POD2 = tu("2 in") # Pipe outer diameter at the socket 2.
-		self.PID2 = tu("1 in") # Pipe inner diameter at the socket 2.
-		self.L2 = tu("4 in") # Length of the socket2.
-		self.L3 = tu("1 in") # Lenght of the intemidate section of the coupling.
+		self.M = tu("5 in") # Outer diameter of socket 1.
+		self.POD = tu("4 in") # Pipe outer diameter at the socket 1.
+		self.PID = tu("3 in") # Pipe inner diameter at the socket 1.
+		self.X1 = tu("4 in") # Length of the socket1.
+		self.M1 = tu("3 in") # Outer diameter of socket 2.
+		self.POD1 = tu("2 in") # Pipe outer diameter at the socket 2.
+		self.PID1 = tu("1 in") # Pipe inner diameter at the socket 2.
+		self.X2 = tu("4 in") # Length of the socket2.
+		self.N = tu("1 in") # Lenght of the intemidate section of the coupling.
 
 	@staticmethod
 	def toSolid(document, part, name):
@@ -124,18 +124,18 @@ class Coupling:
 		return res
 
 	def checkDimensions(self):
-		if not ( self.PID1 > tu("0 mm") and self.PID2 > tu("0 mm") ):
-			raise UnplausibleDimensions("Inner pipe dimensions must be positive. They are %s and %s instead"%(self.PID1, self.PID2))
+		if not ( self.PID > tu("0 mm") and self.PID1 > tu("0 mm") ):
+			raise UnplausibleDimensions("Inner pipe dimensions must be positive. They are %s and %s instead"%(self.PID, self.PID1))
+		if not ( self.M > self.POD and self.POD > self.PID ):
+			raise UnplausibleDimensions("It must hold outer diameter %s > Outer pipe diameter %s > Inner pipe diameter %s"%(self.M, self.POD, self.PID))
 		if not ( self.M1 > self.POD1 and self.POD1 > self.PID1 ):
 			raise UnplausibleDimensions("It must hold outer diameter %s > Outer pipe diameter %s > Inner pipe diameter %s"%(self.M1, self.POD1, self.PID1))
-		if not ( self.M2 > self.POD2 and self.POD2 > self.PID2 ):
-			raise UnplausibleDimensions("It must hold outer diameter %s > Outer pipe diameter %s > Inner pipe diameter %s"%(self.M2, self.POD2, self.PID2))
-		if not ( self.L1 > 0):
-			raise UnplausibleDimensions("Length L1=%s must be positive"%self.L1)
-		if not ( self.L2 > 0):
-			raise UnplausibleDimensions("Length L1=%s must be positive"%self.L1)
-		if not ( self.L3 > 0):
-			raise UnplausibleDimensions("Intermediate length L3=%s must be positive"%self.L3)
+		if not ( self.X1 > 0):
+			raise UnplausibleDimensions("Length X1=%s must be positive"%self.X1)
+		if not ( self.X2 > 0):
+			raise UnplausibleDimensions("Length X2=%s must be positive"%self.X2)
+		if not ( self.N > 0):
+			raise UnplausibleDimensions("Intermediate length N=%s must be positive"%self.N)
 			
 	def calculateShiftA2(self):
 		"""Determine an additional length a2 of the socket 1, such that the wall size of the intermediate
@@ -143,45 +143,45 @@ class Coupling:
 		The size a2 does not come from some document or standard. It is only chosen to avoid thin walls
 		in the intermediate section of thecoupling. Probably a2 must be even larger.
 		"""
-		a2 = max(self.M1-self.POD1, self.M2-self.POD2) / 2
-		x = (self.POD1-self.POD2)
+		a2 = max(self.M-self.POD, self.M1-self.POD1) / 2
+		x = (self.POD-self.POD1)
 		# The math.sqrt will return Float. That is why
 		# we need to convert x in float too.
-		factor = x.Value/math.sqrt(4*self.L3**2+x**2)
+		factor = x.Value/math.sqrt(4*self.N**2+x**2)
 		a1 = factor*a2
 		return a1
 		
 	def createOuterPart(self):
-		if self.M1 == self.M2:
+		if self.M == self.M1:
 			return self.createOuterPartEqual()
 		else:
 			return self.createOuterPartReduced()
 
 	def createOuterPartEqual(self):
-		""" Create a outer part which is cylinder only. This is when M1 and M2 are the same"""
+		""" Create a outer part which is cylinder only. This is when M and M1 are the same"""
 		# Create socket 1.
 		outer = self.document.addObject("Part::Cylinder","Cylinder")
-		outer.Radius = self.M1/2
-		outer.Height = self.L1+self.L2+self.L3
+		outer.Radius = self.M/2
+		outer.Height = self.X1+self.N+self.X2
 		return outer
 
 	def createOuterPartReduced(self):
 		""" Create a outer part which is cylinder+cone+cylinder."""
 		# Create socket 1.
 		cylinder1 = self.document.addObject("Part::Cylinder","Cylinder1")
-		cylinder1.Radius = self.M1/2
+		cylinder1.Radius = self.M/2
 		a1 = self.calculateShiftA2()
-		cylinder1.Height = self.L1+a1
+		cylinder1.Height = self.X1+a1
 		# Create a cone and put it on the cylinder 1
 		cone = self.document.addObject("Part::Cone","Cone")
-		cone.Radius1 = self.M1/2
-		cone.Radius2 = self.M2/2
-		cone.Height = self.L3
+		cone.Radius1 = self.M/2
+		cone.Radius2 = self.M1/2
+		cone.Height = self.N
 		cone.Placement.Base = App.Vector(0,0,cylinder1.Height)
 		# Create a socket 2 and put it on the cone 
 		cylinder2 = self.document.addObject("Part::Cylinder","Cylinder2")
-		cylinder2.Radius = self.M2/2
-		cylinder2.Height = self.L2-a1
+		cylinder2.Radius = self.M1/2
+		cylinder2.Height = self.X2-a1
 		cylinder2.Placement.Base = App.Vector(0,0,cylinder1.Height+cone.Height)
 		# Combine all outer parts.
 		outer = document.addObject("Part::MultiFuse","OuterParts")
@@ -190,23 +190,23 @@ class Coupling:
 
 	def createInnerPart(self):
 		# Create parts which must be removed from the coupling.
-		if self.PID1 == self.PID2:
+		if self.PID == self.PID1:
 			return self.createInnerPartEqual()
 		else:
 			return self.createInnerPartReduced()
 
 	def createInnerPartEqual(self):
-		""" Create inner part from cylinders. This is when PID1 and PID2 are the same"""
+		""" Create inner part from cylinders. This is when PID and PID1 are the same"""
 		cylinder1i = self.document.addObject("Part::Cylinder","Cylinder1i")
-		cylinder1i.Radius = self.POD1/2
-		cylinder1i.Height = self.L1
+		cylinder1i.Radius = self.POD/2
+		cylinder1i.Height = self.X1
 		cylinder3i = self.document.addObject("Part::Cylinder","Cylinder3i")
 		cylinder3i.Radius = self.PID1/2
-		cylinder3i.Height = self.L3
+		cylinder3i.Height = self.N
 		cylinder3i.Placement.Base = App.Vector(0,0,cylinder1i.Height)
 		cylinder2i = self.document.addObject("Part::Cylinder","Cylinder2i")
-		cylinder2i.Radius = self.POD2/2
-		cylinder2i.Height = self.L2
+		cylinder2i.Radius = self.POD1/2
+		cylinder2i.Height = self.X2
 		cylinder2i.Placement.Base = App.Vector(0,0,cylinder1i.Height+cylinder3i.Height)
 		inner = document.addObject("Part::MultiFuse","InnerParts")
 		inner.Shapes = [cylinder1i, cylinder3i, cylinder2i]
@@ -215,16 +215,16 @@ class Coupling:
 	def createInnerPartReduced(self):
 		""" Create a outer part which is cylinder+cone+cylinder."""
 		cylinder1i = self.document.addObject("Part::Cylinder","Cylinder1i")
-		cylinder1i.Radius = self.POD1/2
-		cylinder1i.Height = self.L1
+		cylinder1i.Radius = self.POD/2
+		cylinder1i.Height = self.X1
 		conei = self.document.addObject("Part::Cone","Cone")
-		conei.Radius1 = self.PID1/2
-		conei.Radius2 = self.PID2/2
-		conei.Height = self.L3
+		conei.Radius1 = self.PID/2
+		conei.Radius2 = self.PID1/2
+		conei.Height = self.N
 		conei.Placement.Base = App.Vector(0,0,cylinder1i.Height)
 		cylinder2i = self.document.addObject("Part::Cylinder","Cylinder2i")
-		cylinder2i.Radius = self.POD2/2
-		cylinder2i.Height = self.L2
+		cylinder2i.Radius = self.POD1/2
+		cylinder2i.Height = self.X2
 		cylinder2i.Placement.Base = App.Vector(0,0,cylinder1i.Height+conei.Height)
 		inner = document.addObject("Part::MultiFuse","InnerParts")
 		inner.Shapes = [cylinder1i, conei, cylinder2i]
@@ -259,12 +259,7 @@ class Coupling:
 		return coupling
 
 class CouplingFromTable:
-	"""Crweate a part with dimensions from a CSV table.
-	Note that table dimensions M, PID, POD corresponds to the general coupling dimensions
-	M1, PID1 and POD1, and the table dimensions M1, PID1 and POD1 corresponds to 
-	a general coupling dimensions M2, PID2, POD2. 
-	The strange table dimensions are taken from a documentation of a fitting manufacture.
-	"""
+	"""Create a part with dimensions from a CSV table."""
 	def __init__ (self, document, table):
 		self.document = document
 		self.table = table
@@ -275,15 +270,15 @@ class CouplingFromTable:
 			print("Part not found")
 			return
 			
-		coupling.M1 = tu(row["M"]) # Outer diameter of socket 1.
-		coupling.POD1 = tu(row["POD"]) # Pipe outer diameter at the socket 1.
-		coupling.PID1 = tu(row["PID"]) # Pipe inner diameter at the socket 1.
-		coupling.L1 = (tu(row["L"])-tu(row["N"]))/2# Length of the socket1.
-		coupling.M2 = tu(row["M1"]) # Outer diameter of socket 2.
-		coupling.POD2 = tu(row["POD1"])  # Pipe outer diameter at the socket 2.
-		coupling.PID2 = tu(row["PID1"]) # Pipe inner diameter at the socket 2.
-		coupling.L2 = coupling.L1 # Length of the socket2.
-		coupling.L3 = tu(row["N"]) # Lenght of the intemidate section of the coupling.
+		coupling.M = tu(row["M"]) # Outer diameter of socket 1.
+		coupling.POD = tu(row["POD"]) # Pipe outer diameter at the socket 1.
+		coupling.PID = tu(row["PID"]) # Pipe inner diameter at the socket 1.
+		coupling.X1 = (tu(row["L"])-tu(row["N"]))/2# Length of the socket1.
+		coupling.M1 = tu(row["M1"]) # Outer diameter of socket 2.
+		coupling.POD1 = tu(row["POD1"])  # Pipe outer diameter at the socket 2.
+		coupling.PID1 = tu(row["PID1"]) # Pipe inner diameter at the socket 2.
+		coupling.X2 = coupling.X1 # Length of the socket2.
+		coupling.N = tu(row["N"]) # Lenght of the intemidate section of the coupling.
 
 		part = coupling.create(convertToSolid)
 		part.Label = partName
