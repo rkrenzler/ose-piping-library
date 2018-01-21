@@ -35,7 +35,16 @@ class CsvTable:
 			self.headers = csv_reader.next()
 			# Fill the talble
 			self.data = []
+			names = []
+			ni = self.headers.index("Name")
 			for row in csv_reader:
+				# Check if the name is unique
+				name = row[ni]
+				if name in names:
+					print('Error: Not unique name "%s" found in %s'%(name, filename))
+					exit(1)
+				else:
+					names.append(name)
 				self.data.append(row)
 			csvfile.close() # Should I close this file explicitely?
 			self.hasValidData = self.hasNecessaryColumns()
