@@ -20,6 +20,11 @@ import Part
 
 tu = FreeCAD.Units.parseQuantity
 
+
+def GetMacroPath:
+	param = FreeCAD.ParamGet("User parameter:BaseApp/Preferences/Macro")
+	return param.GetString("MacroPath","")+"/"
+	
 class CsvTable:
 	""" Read coupling dimensions from a csv file"""
 	def __init__(self):
@@ -369,7 +374,7 @@ class GuiCoupling(QtGui.QDialog):
 		self.verticalLayout.addWidget(self.tableViewParts)
 		self.label = QtGui.QLabel(Dialog)
 		self.label.setText("")
-		self.label.setPixmap(App.ConfigGet("UserAppData")+"coupling-dimensions.png")
+		self.label.setPixmap(GetMacroPath()+"coupling-dimensions.png")
 		self.label.setAlignment(QtCore.Qt.AlignCenter)
 		self.label.setObjectName("label")
 		self.verticalLayout.addWidget(self.label)
@@ -451,7 +456,7 @@ class GuiCoupling(QtGui.QDialog):
 document = App.activeDocument()
 
 # Before working with macros, try to load the dimension table.
-CSV_TABLE_PATH = App.ConfigGet("UserAppData")+"coupling.csv"
+CSV_TABLE_PATH = GetMacroPath()+"coupling.csv"
 
 # Check if the CSV file exists
 if os.path.isfile(CSV_TABLE_PATH) == False:
