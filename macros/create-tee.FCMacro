@@ -16,8 +16,13 @@ import Part
 
 
 tu = FreeCAD.Units.parseQuantity
+
+def GetMacroPath():
+	param = FreeCAD.ParamGet("User parameter:BaseApp/Preferences/Macro")
+	return param.GetString("MacroPath","")+"/"
+
 # This is the path to the dimensions table
-CSV_TABLE_PATH = App.ConfigGet("UserAppData")+"tee.csv"
+CSV_TABLE_PATH =  GetMacroPath()+"tee.csv"
 
 
 # The value RELATIVE_EPSILON is used to slightly change the size of a subtracted part
@@ -289,7 +294,7 @@ class MainDialog(QtGui.QDialog):
 # pyside-uic --indent=0 create-tee.ui -o tmp.py
 #
 # The file paths needs to be adjusted manually. For example
-# self.label.setPixmap(QtGui.QPixmap(App.ConfigGet("UserAppData")+"tee-dimensions.png"))
+# self.label.setPixmap(QtGui.QPixmap( GetMacroPath()+"tee-dimensions.png"))
 # access datata in some special FreeCAD directory.
 	def setupUi(self, Dialog):
 		Dialog.setObjectName("Dialog")

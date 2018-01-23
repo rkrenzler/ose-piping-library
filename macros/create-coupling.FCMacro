@@ -21,7 +21,7 @@ import Part
 tu = FreeCAD.Units.parseQuantity
 
 
-def GetMacroPath:
+def GetMacroPath():
 	param = FreeCAD.ParamGet("User parameter:BaseApp/Preferences/Macro")
 	return param.GetString("MacroPath","")+"/"
 	
@@ -356,7 +356,7 @@ class GuiCoupling(QtGui.QDialog):
 # pyside-uic --indent=0 create-coupling.ui -o tmp.py
 #
 # The file paths needs to be adjusted manually. For example
-# self.label.setPixmap(QtGui.QPixmap(App.ConfigGet("UserAppData")+"coupling-dimensions.png"))
+# self.label.setPixmap(QtGui.QPixmap(GetMacroPath()+"coupling-dimensions.png"))
 # access datata in some special FreeCAD directory.
 	def setupUi(self, Dialog):
 		Dialog.setObjectName("Dialog")

@@ -18,6 +18,11 @@ import Part
 document = App.activeDocument()
 tu = FreeCAD.Units.parseQuantity
 
+
+def GetMacroPath():
+	param = FreeCAD.ParamGet("User parameter:BaseApp/Preferences/Macro")
+	return param.GetString("MacroPath","")+"/"
+	
 # The value RELATIVE_EPSILON is used to slightly change the size of a subtracted part
 # to prevent problems with boolean operations.
 # This value does not change the appearance of part and can be large.
@@ -369,7 +374,7 @@ class GuiElbowAlpha(QtGui.QDialog):
 # The following lines are from QtDesigner .ui-file processed by pyside-uic
 # pyside-uic --indent=0 create-elbow-alpha.ui -o tmp.py
 # The file paths needs to be adjusted manually. For example
-# self.label.setPixmap(QtGui.QPixmap(App.ConfigGet("UserAppData")+"alpha-deg-elbow-dimensions.png"))
+# self.label.setPixmap(QtGui.QPixmap(GetMacroPath()+"alpha-deg-elbow-dimensions.png"))
 # access datata in some special FreeCAD directory.
 	def setupUi(self, Dialog):
 		Dialog.setObjectName("Dialog")
@@ -387,7 +392,7 @@ class GuiElbowAlpha(QtGui.QDialog):
 		self.verticalLayout.addWidget(self.tableViewParts)
 		self.label = QtGui.QLabel(Dialog)
 		self.label.setText("")
-		self.label.setPixmap(QtGui.QPixmap(App.ConfigGet("UserAppData")+"alpha-deg-elbow-dimensions.png"))
+		self.label.setPixmap(QtGui.QPixmap(GetMacroPath()+"alpha-deg-elbow-dimensions.png"))
 		self.label.setAlignment(QtCore.Qt.AlignCenter)
 		self.label.setObjectName("label")
 		self.verticalLayout.addWidget(self.label)
@@ -466,7 +471,7 @@ class GuiElbowAlpha(QtGui.QDialog):
 
 
 # Before working with macros, try to load the dimension table.
-CSV_TABLE_PATH = App.ConfigGet("UserAppData")+"alpha-deg-elbow.csv"
+CSV_TABLE_PATH = GetMacroPath()+"alpha-deg-elbow.csv"
 
 # Check if the CSV file exists
 if os.path.isfile(CSV_TABLE_PATH) == False:
