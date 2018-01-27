@@ -189,7 +189,7 @@ class Coupling:
 		cylinder2.Height = self.X2-a1
 		cylinder2.Placement.Base = App.Vector(0,0,cylinder1.Height+cone.Height)
 		# Combine all outer parts.
-		outer = document.addObject("Part::MultiFuse","OuterParts")
+		outer = self.document.addObject("Part::MultiFuse","OuterParts")
 		outer.Shapes = [cylinder1, cone, cylinder2]
 		return outer
 
@@ -213,7 +213,7 @@ class Coupling:
 		cylinder2i.Radius = self.POD1/2
 		cylinder2i.Height = self.X2
 		cylinder2i.Placement.Base = App.Vector(0,0,cylinder1i.Height+cylinder3i.Height)
-		inner = document.addObject("Part::MultiFuse","InnerParts")
+		inner = self.document.addObject("Part::MultiFuse","InnerParts")
 		inner.Shapes = [cylinder1i, cylinder3i, cylinder2i]
 		return inner
 
@@ -231,7 +231,7 @@ class Coupling:
 		cylinder2i.Radius = self.POD1/2
 		cylinder2i.Height = self.X2
 		cylinder2i.Placement.Base = App.Vector(0,0,cylinder1i.Height+conei.Height)
-		inner = document.addObject("Part::MultiFuse","InnerParts")
+		inner = self.document.addObject("Part::MultiFuse","InnerParts")
 		inner.Shapes = [cylinder1i, conei, cylinder2i]
 		return inner
 		
@@ -453,7 +453,7 @@ class GuiCoupling(QtGui.QDialog):
 		self.selectPartByName(settings.value("LastSelectedPartName"))
 
 		
-document = App.activeDocument()
+
 
 # Before working with macros, try to load the dimension table.
 CSV_TABLE_PATH = GetMacroPath()+"coupling.csv"
@@ -491,4 +491,5 @@ def TestTable():
 
 #TestTable()
 #document.recompute()
+#document = App.activeDocument()
 form = GuiCoupling(table)
