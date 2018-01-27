@@ -1,0 +1,176 @@
+# -*- coding: utf-8 -*-
+# Author: Ruslan Krenzler.
+# Date: 27 Januar 2018
+# Create a cross-fitting.
+# Version 0.3
+
+import math
+import csv
+import os.path
+
+from PySide import QtCore, QtGui
+import FreeCAD
+import Spreadsheet
+import Sketcher
+import Part
+
+
+tu = FreeCAD.Units.parseQuantity
+
+def GetMacroPath():
+	param = FreeCAD.ParamGet("User parameter:BaseApp/Preferences/Macro")
+	return param.GetString("MacroPath","")+"/"
+
+# This is the path to the dimensions table
+CSV_TABLE_PATH =  GetMacroPath()+"cross.csv"
+
+
+# The value RELATIVE_EPSILON is used to slightly change the size of a subtracted part
+# to prevent problems with boolean operations.
+# This value does not change the appearance of part and can be large.
+# If the original value is L then we often use the value L*(1+RELATIVE_EPSILON) instead.
+# The relative deviation is then (L*(1+RELATIVE_EPSILON)-L)/L = RELATIVE_EPSILON.
+# That is why the constant has "relative" in its name.
+# On my version of freecad 0.16 The macro works even with RELATIVE_EPSILON = 0.0.
+# Maybe there is no more problems with boolean operations.
+RELATIVE_EPSILON = 0.1
+
+class Cross:
+	def __init__(self, document):
+		self.document = document
+		# Fill data with test values
+		self.G = tu("3 in")
+		self.G1 = tu("3 in")
+		self.G2 = tu("3 in")
+		self.G3 = tu("3 in")
+		self.H = tu("4 in") # It is L/2 for symetrical cross. Why extra dimension?
+		self.H1 = tu("5 in")
+		self.H2 = tu("6 in")
+		self.H3 = tu("7 in")
+		self.PID = tu("2 in")
+		self.PID1 = tu("1 in")
+		self.POD = tu("3 in")
+		self.POD1 = tu("2 in")
+		self.M = tu("5 in")
+		self.M1 = tu("4 in")
+
+	@staticmethod
+	def toSolid(document, part, name):
+		"""Convert object to a solid.
+			Basically those are commands, which FreeCAD runs when user converts a part to a solid.
+		"""
+		s = part.Shape.Faces
+		s = Part.Solid(Part.Shell(s))
+		o = document.addObject("Part::Feature", name)
+		o.Label=name
+		o.Shape=s
+		return o
+	@staticmethod
+	def NestedObjects(group):
+		res = []
+		if group.OutList == []:
+			res.append(group)
+		else:
+			# Append children first.
+			for o in group.OutList:
+				res += Cross.NestedObjects(o)
+			res.append(group)
+		return res
+
+	def create(self, convertToSolid):
+		L = self.H+self.H2
+		vertical_outer_cylinder = self.document.addObject("Part::Cylinder","VerticalOuterCynlider")
+		vertical_outer_cylinder.Radius = self.M1/2
+		vertical_outer_cylinder.Height = self.H1+self.H3
+		vertical_outer_cylinder.Placement.Base = App.Vector(0,0,-self.H3)
+		vertical_inner_cylinder = self.document.addObject("Part::Cylinder","VerticalInnerCynlider")
+		vertical_inner_cylinder.Radius = self.PID1/2
+		vertical_inner_cylinder.Height = vertical_outer_cylinder.Height * (1+RELATIVE_EPSILON)
+		vertical_inner_cylinder.Placement.Base = App.Vector(0,0,-self.H3 *(1+RELATIVE_EPSILON))
+
+		horizontal_outer_cylinder = self.document.addObject("Part::Cylinder","HorizontalOuterCynlider")
+		horizontal_outer_cylinder.Radius = self.M/2
+		horizontal_outer_cylinder.Height = L
+		# I do not understand the logic here. Why when I use GUI the vector is App.Vector(0,0,-L/2)
+		# and with the macros it is App.Vector(-L/2,0,0). Differne systems?
+		horizontal_outer_cylinder.Placement = App.Placement(App.Vector(-self.H,0,0), App.Rotation(App.Vector(0,1,0),90), App.Vector(0,0,0))
+		horizontal_inner_cylinder = self.document.addObject("Part::Cylinder","HorizontalInnerCynlider")
+		horizontal_inner_cylinder.Radius = self.PID/2
+		horizontal_inner_cylinder.Height = L*(1+RELATIVE_EPSILON)
+		horizontal_inner_cylinder.Placement = App.Placement(App.Vector(-self.H*(1+RELATIVE_EPSILON),0,0), App.Rotation(App.Vector(0,1,0),90), App.Vector(0,0,0))
+		
+		# Fuse outer parts to a cross, fuse inner parts to a cross, substract both parts
+		outer_fusion = self.document.addObject("Part::MultiFuse","OuterCrossFusion")
+		outer_fusion.Shapes = [vertical_outer_cylinder,horizontal_outer_cylinder]
+		inner_fusion = self.document.addObject("Part::MultiFuse","InnerCrossFusion")
+		inner_fusion.Shapes = [vertical_inner_cylinder,horizontal_inner_cylinder]
+		basic_cross = self.document.addObject("Part::Cut","Cut")
+		basic_cross.Base = outer_fusion
+		basic_cross.Tool = inner_fusion
+		
+		# Remove place for sockets.
+		socket_left = self.document.addObject("Part::Cylinder","SocketLeft")
+		socket_left.Radius = self.POD /2
+		socket_left.Height = (self.H-self.G)*(1+RELATIVE_EPSILON)
+		socket_left.Placement = App.Placement(App.Vector(-socket_left.Height - self.G,0,0), App.Rotation(App.Vector(0,1,0),90), App.Vector(0,0,0))
+#		socket_left.Placement = App.Placement(App.Vector(-(self.H-self.G),0,0), App.Rotation(App.Vector(0,1,0),90), App.Vector(0,0,0))
+		
+		socket_right = self.document.addObject("Part::Cylinder","SocketRight")
+		socket_right.Radius = self.POD /2
+		socket_right.Height = (self.H2-self.G2)*(1+RELATIVE_EPSILON)
+		socket_right.Placement = App.Placement(App.Vector(self.G2,0,0), App.Rotation(App.Vector(0,1,0),90), App.Vector(0,0,0))
+		
+		socket_top = self.document.addObject("Part::Cylinder","SocketTop")
+		socket_top.Radius = self.POD1 /2
+		socket_top.Height = (self.H1 - self.G1)*(1+RELATIVE_EPSILON)
+		socket_top.Placement.Base = App.Vector(0,0,self.G1)
+		
+		socket_bottom = self.document.addObject("Part::Cylinder","SocketBottom")
+		socket_bottom.Radius = self.POD1 /2
+		socket_bottom.Height = (self.H3 - self.G3)*(1+RELATIVE_EPSILON)
+		socket_bottom.Placement.Base = App.Vector(0,0,-socket_bottom.Height-self.G3)
+
+		sockets_fusion = self.document.addObject("Part::MultiFuse","Sockets")
+		sockets_fusion.Shapes = [socket_left,socket_right,socket_top,socket_bottom]
+		# Remove sockets from the basic cross
+		cross = self.document.addObject("Part::Cut","Cross")
+		cross.Base = basic_cross
+		cross.Tool = sockets_fusion
+		if convertToSolid:
+			# Before making a solid, recompute documents. Otherwise there will be
+			#    s = Part.Solid(Part.Shell(s))
+			#    <class 'Part.OCCError'>: Shape is null
+			# exception.
+			self.document.recompute()
+			# Now convert all parts to solid, and remove intermediate data.
+			solid = self.toSolid(self.document, cross, "cross (solid)")
+			# Remove previous (intermediate parts).
+			parts = Cross.NestedObjects(cross)
+			# Document.removeObjects can remove multple objects, when we use
+			# parts directly. To prevent exceptions with deleted objects,
+			# use the name list instead.
+			names_to_remove = []
+			for part in parts:
+				if part.Name not in names_to_remove:
+					names_to_remove.append(part.Name)
+			for name in names_to_remove:
+				print("Deleting temporary objects %s."%name)
+				self.document.removeObject(name)
+			return solid
+		return cross
+
+
+# Before working with macros, try to load the dimension table.
+# Test macros.
+def TestCross():
+	document = App.activeDocument()
+	cross = Cross(document)
+	cross.create(True)
+	document.recompute()
+
+
+# Create cross fitting.
+TestCross()
+
+
+
