@@ -321,7 +321,7 @@ class MainDialog(QtGui.QDialog):
 		self.verticalLayout.addWidget(self.label_2)
 		self.label = QtGui.QLabel(Dialog)
 		self.label.setText("")
-		self.label.setPixmap(QtGui.QPixmap(App.ConfigGet("UserAppData")+"tee-dimensions.png"))
+		self.label.setPixmap(QtGui.QPixmap(GetMacroPath()+"tee-dimensions.png"))
 		self.label.setAlignment(QtCore.Qt.AlignCenter)
 		self.label.setObjectName("label")
 		self.verticalLayout.addWidget(self.label)
