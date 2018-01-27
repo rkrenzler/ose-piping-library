@@ -15,7 +15,7 @@ import Sketcher
 import Part
 
 
-document = App.activeDocument()
+
 tu = FreeCAD.Units.parseQuantity
 
 
@@ -493,6 +493,7 @@ if table.hasValidData == False:
 
 # Test macro.
 def TestAlphaTable():
+	document = App.activeDocument()
 	elbow = ElbowAlphaFromTable(document, table)
 	for i in range(0, len(table.data)):
 		print("Selecting row %d"%i)

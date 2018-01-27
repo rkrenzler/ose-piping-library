@@ -172,7 +172,6 @@ class Tee:
 		
 		sockets_fusion = self.document.addObject("Part::MultiFuse","Sockets")
 		sockets_fusion.Shapes = [socket_left,socket_right,socket_top]
-		#document.recompute()
 		# remove sockets from the basic tee
 		tee = self.document.addObject("Part::Cut","Tee")
 		tee.Base = basic_tee
@@ -425,15 +424,15 @@ if table.hasValidData == False:
 	msgBox.exec_()
 	exit(1) # Error
 	
-# determine an active document
-document = App.activeDocument()
-
 # Test macros.
 def TestTee():
+	document = App.activeDocument()
 	tee = Tee(document)
 	tee.create(False)
 	document.recompute()
+
 def TestTable():
+	document = App.activeDocument()
 	tee = TeeFromTable(document, table)
 	for i in range(0, len(table.data)):
 		print("Selecting row %d"%i)

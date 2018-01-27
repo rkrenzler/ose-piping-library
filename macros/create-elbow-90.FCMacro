@@ -15,7 +15,6 @@ import Sketcher
 import Part
 
 
-document = App.activeDocument()
 tu = FreeCAD.Units.parseQuantity
 
 # The value RELATIVE_EPSILON is used to slightly change the size of a subtracted part
@@ -475,6 +474,7 @@ if table.hasValidData == False:
 
 # Test macro.
 def Test90Table():
+	document = App.activeDocument()
 	elbow = Elbow90FromTable(document, table)
 	for i in range(0, len(table.data)):
 		partName = table.getPartName(i)
@@ -483,6 +483,5 @@ def Test90Table():
 		document.recompute()
 		
 
-#Test90Table()
 
 form = GuiElbow90(table)
