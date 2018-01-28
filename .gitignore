@@ -106,3 +106,5 @@ ENV/
 *.lyx~
 # gedit backup files
 \#*
+# Temporary file with GUI-python code, created using pyside-uic from .ui file.
+tmp.py
