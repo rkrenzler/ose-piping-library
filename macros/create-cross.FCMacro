@@ -14,15 +14,16 @@ import Spreadsheet
 import Sketcher
 import Part
 
-
 tu = FreeCAD.Units.parseQuantity
 
 def GetMacroPath():
 	param = FreeCAD.ParamGet("User parameter:BaseApp/Preferences/Macro")
-	return param.GetString("MacroPath","")+"/"
+	return param.GetString("MacroPath","")
 
-# This is the path to the dimensions table
-CSV_TABLE_PATH =  GetMacroPath()+"cross.csv"
+# This is the path to the dimensions table. 
+CSV_TABLE_PATH =  GetMacroPath()+"/cross.csv"
+# It must contain unique values in the column "Name" and also, dimensions listened below.
+DIMENSIONS_USED = ["POD", "PID", "POD1", "PID1", "G", "G1", "G2", "G3", "H", "H1", "H2", "H3", "M", "M1"]
 
 
 # The value RELATIVE_EPSILON is used to slightly change the size of a subtracted part
@@ -43,7 +44,7 @@ class Cross:
 		self.G1 = tu("3 in")
 		self.G2 = tu("3 in")
 		self.G3 = tu("3 in")
-		self.H = tu("4 in") # It is L/2 for symetrical cross. Why extra dimension?
+		self.H = tu("4 in") # It is L/2 for symetrical cross. Why extra dimension in documentation?
 		self.H1 = tu("5 in")
 		self.H2 = tu("6 in")
 		self.H3 = tu("7 in")
@@ -159,6 +160,93 @@ class Cross:
 			return solid
 		return cross
 
+class CrossFromTable:
+	"""Create a part with dimensions from a CSV table."""
+	def __init__ (self, document, table):
+		self.document = document
+		self.table = table
+	def create(self, partName, convertToSolid = True):
+		cross = Cross(self.document)
+		row = self.table.findPart(partName)
+		if row is None:
+			print("Part not found")
+			return
+		cross.G = tu(row["G"])
+		cross.G1 = tu(row["G1"])
+		cross.G2 = tu(row["G2"])
+		cross.G3 = tu(row["G3"])
+		cross.H = tu(row["H"])
+		cross.H1 = tu(row["H1"])
+		cross.H2 = tu(row["H2"])
+		cross.H3 = tu(row["H3"])
+		cross.PID = tu(row["PID"])
+		cross.PID1 = tu(row["PID1"])
+		cross.POD = tu(row["POD"])
+		cross.POD1 = tu(row["POD1"])
+		cross.M = tu(row["M"])
+		cross.M1 = tu(row["M1"])
+
+		part = cross.create(convertToSolid)
+		part.Label = partName
+		return part
+
+
+
+class CsvTable:
+	""" Read coupling dimensions from a csv file.
+	one part of the column must be unique and contains a unique key.
+	It is the column "Name".
+	"""
+	def __init__(self, mandatoryDims=[]):
+		"""
+		@param mandatoryDims: list of column names which must be presented in the CSV files apart
+		the "Name" column
+		"""
+		self.headers = []
+		self.data = []
+		self.hasValidData = False
+		self.mandatoryDims=mandatoryDims
+	def load(self, filename):
+		"""Load data from a CSV file."""
+		self.hasValidData = False
+		with open(filename, "r") as csvfile:
+			csv_reader = csv.reader(csvfile, delimiter=',', quotechar='"')
+			self.headers = csv_reader.next()
+			# Fill the talble
+			self.data = []
+			names = []
+			ni = self.headers.index("Name")
+			for row in csv_reader:
+				# Check if the name is unique
+				name = row[ni]
+				if name in names:
+					print('Error: Not unique name "%s" found in %s'%(name, filename))
+					exit(1)
+				else:
+					names.append(name)
+				self.data.append(row)
+			csvfile.close() # Should I close this file explicitely?
+			self.hasValidData = self.hasNecessaryColumns()
+
+	def hasNecessaryColumns(self):
+		""" Check if the data contains all calumns required to create a coupling."""
+		return all(h in self.headers for h in (self.mandatoryDims + ["Name"]))
+
+	def findPart(self, name):
+		"""Return first first raw with the particular part name as a dictionary."""
+		# First find out the index of the column "Name".
+		ci = self.headers.index("Name")
+		# Search for the first appereance of the name in this column.
+		for row in self.data:
+			if row[ci] == name:
+				# Convert row to dicionary.
+				return dict(zip(self.headers, row))
+		return None
+
+	def getPartName(self, index):
+		"""Return part name of a row with the index *index*."""
+		ci = self.headers.index("Name")
+		return self.data[index][ci]
 
 # Before working with macros, try to load the dimension table.
 # Test macros.
@@ -168,9 +256,22 @@ def TestCross():
 	cross.create(True)
 	document.recompute()
 
+# Test macro.
+def TestTable():
+	document = App.activeDocument()
+	table = CsvTable(DIMENSIONS_USED)
+	table.load(CSV_TABLE_PATH)
+	cross = CrossFromTable(document, table)
+	for i in range(0, len(table.data)):
+		print("Selecting row %d"%i)
+		partName = table.getPartName(i)
+		print("Creating part %s"%partName)
+		cross.create(partName, False)
+		document.recompute()
 
 # Create cross fitting.
-TestCross()
+#TestCross()
+TestTable()
 
 
 
