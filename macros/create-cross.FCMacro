@@ -289,7 +289,7 @@ class PartTableModel(QtCore.QAbstractTableModel):
 
 class MainDialog(QtGui.QDialog):
 	QSETTINGS_APPLICATION = "OSE piping freecad macros"
-	QSETTINGS_NAME = "tee user input"
+	QSETTINGS_NAME = "cross user input"
 	def __init__(self, table):
 		super(MainDialog, self).__init__()
 		self.table = table
@@ -422,7 +422,7 @@ def GuiCheckTable():
 	# Check if the CSV file exists.
 	if os.path.isfile(CSV_TABLE_PATH) == False:
 		text = "This macro requires %s  but this file does not exist."%(CSV_TABLE_PATH)
-		msgBox = QtGui.QMessageBox(QtGui.QMessageBox.Warning, "Creating of the tee failed.", text)
+		msgBox = QtGui.QMessageBox(QtGui.QMessageBox.Warning, "Creating of the cross failed.", text)
 		msgBox.exec_()
 		exit(1) # Error
 
@@ -433,7 +433,7 @@ def GuiCheckTable():
 	if table.hasValidData == False:
 		text = 'Invalid %s.\n'\
 			'It must contain columns %s.'%(CSV_TABLE_PATH, ", ".join(DIMENSIONS_USED))
-		msgBox = QtGui.QMessageBox(QtGui.QMessageBox.Warning, "Creating of the tee failed.", text)
+		msgBox = QtGui.QMessageBox(QtGui.QMessageBox.Warning, "Creating of the cross failed.", text)
 		msgBox.exec_()
 		exit(1) # Error
 
