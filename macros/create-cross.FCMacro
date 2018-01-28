@@ -318,7 +318,7 @@ class MainDialog(QtGui.QDialog):
 # access datata in some special FreeCAD directory.
 	def setupUi(self, Dialog):
 		Dialog.setObjectName("Dialog")
-		Dialog.resize(803, 592)
+		Dialog.resize(803, 666)
 		self.verticalLayout = QtGui.QVBoxLayout(Dialog)
 		self.verticalLayout.setObjectName("verticalLayout")
 		self.checkBoxCreateSolid = QtGui.QCheckBox(Dialog)
