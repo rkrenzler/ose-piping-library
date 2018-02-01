@@ -98,7 +98,17 @@ class Elbow:
 			raise UnplausibleDimensions("Length len1=%s must be positive"%self.len1)
 		if not ( self.len2 > 0):
 			raise UnplausibleDimensions("Length len2=%s must be positive"%self.len2)
-			
+	
+	@staticmethod
+	def CreateLineSegment(point_1, point_2):
+		""" Create a line segment.
+		This function creates the line calling different methods, depending on the version of FreeCAD
+		"""
+		if hasattr(Part, "LineSegment") and callable(getattr(Part, "LineSegment")):
+			return Part.LineSegment(point_1, point_2)
+		else:
+			return Part.Line(point_1, point_2)
+
 	def createElbowCylinder(self, group, r_cyl, r_bent, alpha, len1, len2):
 		"""Create a cylinder with a radius r_cyl with a base on X-Y plane
 		and bent it by angle alpha along radius r_bent. Add streight cylinders at the ends
@@ -123,7 +133,7 @@ class Elbow:
 		path_sketch.Placement = App.Placement(App.Vector(0.000000,0.000000,0.000000),App.Rotation(-0.707107,0.000000,0.000000,-0.707107))
 		# Note the pskecth is rotatet, therefore y and z coordinates are exchanged (? is it still true)
 		# Add a line into to the bottom direction (negative Z).
-		line1 = Part.Line(App.Vector(0.000000,0.000000,0),App.Vector(-0.000000,-len1,0))
+		line1 = self.CreateLineSegment(App.Vector(0.000000,0.000000,0),App.Vector(-0.000000,-len1,0))
 		path_sketch.addGeometry(line1, False)
 
 		# Add the arc part.
@@ -139,7 +149,7 @@ class Elbow:
 		x2 = x1 + math.cos((tu("pi/2 rad")-alpha).getValueAs("rad"))*len2
 		z2 = z1 + math.sin((tu("pi/2 rad")-alpha).getValueAs("rad"))*len2
 		# Draw a streight line for the right pipe.
-		line2 = Part.Line(App.Vector(x1,z1,0),App.Vector(x2,z2,0))
+		line2 = self.CreateLineSegment(App.Vector(x1,z1,0),App.Vector(x2,z2,0))
 		line2_geometry = path_sketch.addGeometry(line2,False)
 		# Sweep the parts.
 		sweep = self.document.addObject('Part::Sweep','Sweep')
