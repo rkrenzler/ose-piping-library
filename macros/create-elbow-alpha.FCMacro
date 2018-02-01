@@ -324,11 +324,9 @@ class PartTableModel(QtCore.QAbstractTableModel):
 		QtCore.QAbstractTableModel.__init__(self, parent, *args) 
 	
 	def rowCount(self, parent): 
-		print("rowCount %d"%len(self.table_data) )
 		return len(self.table_data) 
  
 	def columnCount(self, parent):
-		print("columnCount %d"%len(self.headers) )
 		return len(self.headers) 
  
 	def data(self, index, role):
