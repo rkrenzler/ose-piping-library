@@ -427,7 +427,7 @@ def GuiCheckTable():
 		exit(1) # Error
 
 	print("Trying to load CSV file with dimensions: %s"%CSV_TABLE_PATH) 
-	table = CsvTable()
+	table = CsvTable(DIMENSIONS_USED)
 	table.load(CSV_TABLE_PATH)
 
 	if table.hasValidData == False:
@@ -462,8 +462,6 @@ def TestTable():
 #TestCross()
 #TestTable()
 table = GuiCheckTable() # Open a CSV file, check its content, and return i as a CsvTable object.
-table.load(CSV_TABLE_PATH)
-
 form = MainDialog(table)
 
 
