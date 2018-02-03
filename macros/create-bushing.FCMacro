@@ -1,0 +1,164 @@
+# -*- coding: utf-8 -*-
+# Author: Ruslan Krenzler.
+# Date: 27 Januar 2018
+# Create a cross-fitting.
+# Version 0.3
+
+import math
+import csv
+import os.path
+
+from PySide import QtCore, QtGui
+import FreeCAD
+import Spreadsheet
+import Sketcher
+import Part
+
+tu = FreeCAD.Units.parseQuantity
+
+def GetMacroPath():
+	param = FreeCAD.ParamGet("User parameter:BaseApp/Preferences/Macro")
+	return param.GetString("MacroPath","")
+
+# This is the path to the dimensions table. 
+CSV_TABLE_PATH =  GetMacroPath()+"/bushing.csv"
+# It must contain unique values in the column "Name" and also, dimensions listened below.
+DIMENSIONS_USED = ["PID", "PID1", "POD", "L", "N"]
+
+
+# The value RELATIVE_EPSILON is used to slightly change the size of a subtracted part
+# to prevent problems with boolean operations.
+# This value does not change the appearance of part and can be large.
+# If the original value is L then we often use the value L*(1+RELATIVE_EPSILON) instead.
+# The relative deviation is then (L*(1+RELATIVE_EPSILON)-L)/L = RELATIVE_EPSILON.
+# That is why the constant has "relative" in its name.
+# On my version of freecad 0.16 The macro works even with RELATIVE_EPSILON = 0.0.
+# Maybe there is no more problems with boolean operations.
+RELATIVE_EPSILON = 0.1
+
+def nestedObjects(group):
+	res = []
+	if group.OutList == []:
+		res.append(group)
+	else:
+		# Append children first.
+		for o in group.OutList:
+			res += nestedObjects(o)
+		res.append(group)
+	return res
+
+def toSolid(document, part, name):
+	"""Convert object to a solid.
+		Basically those are commands, which FreeCAD runs when user converts a part to a solid.
+	"""
+	s = part.Shape.Faces
+	s = Part.Solid(Part.Shell(s))
+	o = document.addObject("Part::Feature", name)
+	o.Label=name
+	o.Shape=s
+	return o
+
+class Bushing:
+	def __init__(self, document):
+		self.document = document
+		self.PID = tu("4 in")
+		self.PID1 = tu("1 in")
+		self.POD1 = tu("2 in")
+		self.N = tu("2 in")
+		self.L = tu("3 in")
+		
+	def createThing(self):
+		# Create Octagonal thing. I do not know its name.
+
+		# I do not know how to calculate X, there fore I just
+		# take a half of (L-N)
+		X1 = (self.L-self.N)/2
+		box1 = self.document.addObject("Part::Box","Box")
+		box1.Height = X1
+		box1.Length = self.PID
+		box1.Width = self.PID
+		# Move the box into the center
+		center = App.Vector(-self.PID/2, -self.PID/2,0)
+		box1.Placement.Base = center
+		# Add another box, but rotated by 45° around the z axis.
+		box2 = self.document.addObject("Part::Box","Box")	
+		box2.Height = box1.Height
+		box2.Length = box1.Length
+		box2.Width = box1.Width
+		box2.Placement.Base = box1.Placement.Base
+		import Draft
+		Draft.rotate([box2],45,FreeCAD.Vector(0.0,0.0,0.0),axis=FreeCAD.Vector(0.0,0.0,1.0),copy=False)
+		# Cut both boxes
+		common = self.document.addObject("Part::MultiCommon","Common")
+		common.Shapes = [box1,box2,]
+		# Put the thing at the top of the bushing
+		common.Placement.Base = App.Vector(0,0,self.L-X1)
+		return common
+	def createOuterPart(self):
+		outer_cylinder = self.document.addObject("Part::Cylinder","OuterCynlider")
+		outer_cylinder.Radius = self.PID/2
+		outer_cylinder.Height = self.L
+		thing = self.createThing()
+		# Bind two parts.
+		fusion = self.document.addObject("Part::MultiFuse","Fusion")
+		fusion.Shapes = [outer_cylinder,thing,]
+		return fusion
+	def create(self, convertToSolid):
+		outer = self.createOuterPart()
+		# Remove inner part of the sockets.
+		inner_cylinder = self.document.addObject("Part::Cylinder","OuterCynlider")
+		inner_cylinder.Radius = self.PID1/2
+		inner_cylinder.Height = self.L
+
+		inner_socket = self.document.addObject("Part::Cylinder","OuterCynlider")
+		inner_socket.Radius = self.POD1/2
+		inner_socket.Height = self.L - self.N
+		inner_socket.Placement.Base = App.Vector(0,0,self.N)
+
+		# Make a cone for a larger socket. There are no dimensions for this con. There fore 
+		# use simbolically a Radius such that the wall at the lower end is twice as ting
+		# as in the upper end of socket.
+		W2 = (self.PID-self.PID1)/2
+		socket_cone = self.document.addObject("Part::Cone","Cone")
+		socket_cone.Radius2 = self.PID1/2
+		socket_cone.Radius1 = self.PID1/2 + W2/2
+		socket_cone.Height = self.N
+		inner = self.document.addObject("Part::MultiFuse","Fusion")
+		inner.Shapes = [inner_cylinder,inner_socket,socket_cone]
+		bushing = self.document.addObject("Part::Cut","Cut")
+		bushing.Base = outer
+		bushing.Tool = inner
+
+		if convertToSolid:
+			# Before making a solid, recompute documents. Otherwise there will be
+			#    s = Part.Solid(Part.Shell(s))
+			#    <class 'Part.OCCError'>: Shape is null
+			# exception.
+			self.document.recompute()
+			# Now convert all parts to solid, and remove intermediate data.
+			solid = toSolid(self.document, bushing, "bushing (solid)")
+			# Remove previous (intermediate parts).
+			parts = nestedObjects(bushing)
+			# Document.removeObjects can remove multple objects, when we use
+			# parts directly. To prevent exceptions with deleted objects,
+			# use the name list instead.
+			names_to_remove = []
+			for part in parts:
+				if part.Name not in names_to_remove:
+					names_to_remove.append(part.Name)
+			for name in names_to_remove:
+				print("Deleting temporary objects %s."%name)
+				self.document.removeObject(name)
+			return solid
+		return bushing
+
+# Test macros.
+def TestBushing():
+	document = App.activeDocument()
+	bushing = Bushing(document)
+	bushing.create(True)
+	document.recompute()
+
+TestBushing()
+
+
