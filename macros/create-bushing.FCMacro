@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # Author: Ruslan Krenzler.
 # Date: 27 Januar 2018
-# Create a cross-fitting.
+# Create a bushing-fitting.
 # Version 0.3
 
 import math
@@ -73,12 +73,15 @@ class Bushing:
 		# I do not know how to calculate X, there fore I just
 		# take a half of (L-N)
 		X1 = (self.L-self.N)/2
+		# I also do not know what is the size of the thing.
+		# I take 1.2 of the inner diameter of the larger pipe
+		X2 = self.PID*1.1
 		box1 = self.document.addObject("Part::Box","Box")
 		box1.Height = X1
-		box1.Length = self.PID
-		box1.Width = self.PID
+		box1.Length = X2
+		box1.Width = X2
 		# Move the box into the center
-		center = App.Vector(-self.PID/2, -self.PID/2,0)
+		center = App.Vector(-X2/2, -X2/2,0)
 		box1.Placement.Base = center
 		# Add another box, but rotated by 45° around the z axis.
 		box2 = self.document.addObject("Part::Box","Box")	
@@ -122,7 +125,8 @@ class Bushing:
 		socket_cone = self.document.addObject("Part::Cone","Cone")
 		socket_cone.Radius2 = self.PID1/2
 		socket_cone.Radius1 = self.PID1/2 + W2/2
-		socket_cone.Height = self.N
+		socket_cone.Height = self.N/2 # I do not know what the hight of the cone should be.
+						# I just take a half. 
 		inner = self.document.addObject("Part::MultiFuse","Fusion")
 		inner.Shapes = [inner_cylinder,inner_socket,socket_cone]
 		bushing = self.document.addObject("Part::Cut","Cut")
@@ -152,6 +156,83 @@ class Bushing:
 			return solid
 		return bushing
 
+class CsvTable:
+	""" Read coupling dimensions from a csv file.
+	one part of the column must be unique and contains a unique key.
+	It is the column "Name".
+	"""
+	def __init__(self, mandatoryDims=[]):
+		"""
+		@param mandatoryDims: list of column names which must be presented in the CSV files apart
+		the "Name" column
+		"""
+		self.headers = []
+		self.data = []
+		self.hasValidData = False
+		self.mandatoryDims=mandatoryDims
+	def load(self, filename):
+		"""Load data from a CSV file."""
+		self.hasValidData = False
+		with open(filename, "r") as csvfile:
+			csv_reader = csv.reader(csvfile, delimiter=',', quotechar='"')
+			self.headers = csv_reader.next()
+			# Fill the talble
+			self.data = []
+			names = []
+			ni = self.headers.index("Name")
+			for row in csv_reader:
+				# Check if the name is unique
+				name = row[ni]
+				if name in names:
+					print('Error: Not unique name "%s" found in %s'%(name, filename))
+					exit(1)
+				else:
+					names.append(name)
+				self.data.append(row)
+			csvfile.close() # Should I close this file explicitely?
+			self.hasValidData = self.hasNecessaryColumns()
+
+	def hasNecessaryColumns(self):
+		""" Check if the data contains all the columns required to create a bushing."""
+		return all(h in self.headers for h in (self.mandatoryDims + ["Name"]))
+
+	def findPart(self, name):
+		"""Return first first raw with the particular part name as a dictionary."""
+		# First find out the index of the column "Name".
+		ci = self.headers.index("Name")
+		# Search for the first appereance of the name in this column.
+		for row in self.data:
+			if row[ci] == name:
+				# Convert row to dicionary.
+				return dict(zip(self.headers, row))
+		return None
+
+	def getPartName(self, index):
+		"""Return part name of a row with the index *index*."""
+		ci = self.headers.index("Name")
+		return self.data[index][ci]
+
+class BushingFromTable:
+	"""Create a part with dimensions from a CSV table."""
+	def __init__ (self, document, table):
+		self.document = document
+		self.table = table
+	def create(self, partName, convertToSolid = True):
+		bushing = Bushing(self.document)
+		row = self.table.findPart(partName)
+		if row is None:
+			print("Part not found")
+			return
+		bushing.PID = tu(row["PID"])
+		bushing.PID1 = tu(row["PID1"])
+		bushing.POD1 = tu(row["POD1"])
+		bushing.N = tu(row["N"])
+		bushing.L = tu(row["L"])
+
+		part = bushing.create(convertToSolid)
+		part.Label = partName
+		return part
+
 # Test macros.
 def TestBushing():
 	document = App.activeDocument()
@@ -159,6 +240,20 @@ def TestBushing():
 	bushing.create(True)
 	document.recompute()
 
-TestBushing()
+def TestTable():
+	document = App.activeDocument()
+	table = CsvTable(DIMENSIONS_USED)
+	table.load(CSV_TABLE_PATH)
+	bushing = BushingFromTable(document, table)
+	for i in range(0, len(table.data)):
+		print("Selecting row %d"%i)
+		partName = table.getPartName(i)
+		print("Creating part %s"%partName)
+		bushing.create(partName, True)
+		document.recompute()
+		break
+
+#TestBushing()
+TestTable()
 
 
