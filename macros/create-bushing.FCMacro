@@ -97,8 +97,43 @@ class Bushing:
 			raise UnplausibleDimensions("Outer diameter of the larger pipe POD %s must be larger than outer diameter of the smaller pipe POD1 %s."%(self.POD, self.POD1))
 		if not ( self.L > self.N):
 			raise UnplausibleDimensions("The liength L %s must be larger than the length N %s"%(self.L, self.N))
-		
-	def createThing(self):
+	def createHexaThing(self):
+		# Create hexagonal thing. I do not know its name.
+
+		# I do not know how to calculate X, there fore I just
+		# take a half of (L-N)
+		X1 = (self.L-self.N)/2
+		# I also do not know what is the size of the thing.
+		# I take 1.2 of the inner diameter of the larger pipe
+		X2 = self.POD*1.1
+		box1 = self.document.addObject("Part::Box","Box")
+		box1.Height = X1
+		box1.Length = X2
+		box1.Width = X2*2
+		# Move the box into the center of the X,Y plane.
+		center_pos = App.Vector(-X2/2, -X2,0)
+		box_center  = App.Vector(X2/2, X2,0)
+		box1.Placement.Base = center_pos
+		# Add another box, but rotated by 60° around the z axis.
+		box2 = self.document.addObject("Part::Box","Box")	
+		box2.Height = box1.Height
+		box2.Length = box1.Length
+		box2.Width = box1.Width
+		box2.Placement=App.Placement(center_pos, App.Rotation(App.Vector(0,0,1),60), box_center)
+		# Add another box, but rotated by 120° around the z axis.
+		box3 = self.document.addObject("Part::Box","Box")	
+		box3.Height = box1.Height
+		box3.Length = box1.Length
+		box3.Width = box1.Width
+		box3.Placement=App.Placement(center_pos, App.Rotation(App.Vector(0,0,1),120), box_center)
+		# Cut both boxes
+		common = self.document.addObject("Part::MultiCommon","Common")
+		common.Shapes = [box1,box2,box3]
+		# Put the thing at the top of the bushing
+		common.Placement.Base = App.Vector(0,0,self.L-X1)
+		return common
+
+	def createOctaThing(self):
 		# Create Octagonal thing. I do not know its name.
 
 		# I do not know how to calculate X, there fore I just
@@ -111,17 +146,16 @@ class Bushing:
 		box1.Height = X1
 		box1.Length = X2
 		box1.Width = X2
-		# Move the box into the center
-		center = App.Vector(-X2/2, -X2/2,0)
-		box1.Placement.Base = center
+		# Move the box into the center of the X,Y plane.
+		center_pos = App.Vector(-X2/2, -X2/2,0)
+		box_center  = App.Vector(X2/2, X2/2,0)
+		box1.Placement.Base = center_pos
 		# Add another box, but rotated by 45° around the z axis.
 		box2 = self.document.addObject("Part::Box","Box")	
 		box2.Height = box1.Height
 		box2.Length = box1.Length
 		box2.Width = box1.Width
-		box2.Placement.Base = box1.Placement.Base
-		import Draft
-		Draft.rotate([box2],45,FreeCAD.Vector(0.0,0.0,0.0),axis=FreeCAD.Vector(0.0,0.0,1.0),copy=False)
+		box2.Placement=App.Placement(center_pos, App.Rotation(App.Vector(0,0,1),45), box_center)
 		# Cut both boxes
 		common = self.document.addObject("Part::MultiCommon","Common")
 		common.Shapes = [box1,box2,]
@@ -132,7 +166,7 @@ class Bushing:
 		outer_cylinder = self.document.addObject("Part::Cylinder","OuterCynlider")
 		outer_cylinder.Radius = self.POD/2
 		outer_cylinder.Height = self.L
-		thing = self.createThing()
+		thing = self.createOctaThing()
 		# Bind two parts.
 		fusion = self.document.addObject("Part::MultiFuse","Fusion")
 		fusion.Shapes = [outer_cylinder,thing,]
