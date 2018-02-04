@@ -58,6 +58,25 @@ def toSolid(document, part, name):
 	o.Shape=s
 	return o
 
+
+class Error(Exception):
+	"""Base class for exceptions in this module."""
+	def __init__(self, message):
+		super(Error, self).__init__(message)
+
+
+class UnplausibleDimensions(Error):
+	"""Exception raised when dimensions are unplausible. For example if
+	outer diameter is larger than the iner one.
+
+	Attributes:
+	message -- explanation of the error
+	"""
+
+	def __init__(self, message):
+		super(UnplausibleDimensions, self).__init__(message)
+
+
 class Bushing:
 	def __init__(self, document):
 		self.document = document
@@ -66,6 +85,18 @@ class Bushing:
 		self.POD1 = tu("2 in")
 		self.N = tu("2 in")
 		self.L = tu("3 in")
+		
+	def checkDimensions(self):
+		if not ( self.PID > tu("0 mm") and self.PID1 > tu("0 mm") ):
+			raise UnplausibleDimensions("Inner pipe dimensions must be positive. They are %s and %s instead"%(self.PID, self.PID1))
+		if not ( self.POD1 > self.PID1):
+			raise UnplausibleDimensions("Outer diameter POD1 %s must be larger than inner diameter PID1 %s"%(self.POD1, self.PID1))
+		if not ( self.N > 0):
+			raise UnplausibleDimensions("Length N=%s must be positive"%self.X1)
+		if not ( self.PID > self.POD1):
+			raise UnplausibleDimensions("Inner diameter of the larger pipe PID %s must be larger than outer diameter of the smaller pipe POD1 %s."%(self.PID, self.POD1))
+		if not ( self.L > self.N):
+			raise UnplausibleDimensions("The liength L %s must be larger than the length N %s"%(self.L, self.N))
 		
 	def createThing(self):
 		# Create Octagonal thing. I do not know its name.
@@ -107,6 +138,7 @@ class Bushing:
 		fusion.Shapes = [outer_cylinder,thing,]
 		return fusion
 	def create(self, convertToSolid):
+		self.checkDimensions()
 		outer = self.createOuterPart()
 		# Remove inner part of the sockets.
 		inner_cylinder = self.document.addObject("Part::Cylinder","OuterCynlider")
@@ -363,6 +395,18 @@ class MainDialog(QtGui.QDialog):
 			if row_i >= 0:
 				self.tableViewParts.selectRow(row_i)
 
+	def partDimensionsSupported(self, partName):
+		row = self.table.findPart(partName)
+		"""Return true if the dimension of the bushing are supported and False otherwise.
+		Also return message as the second argument """
+		PID = row["PID"]
+		POD1 = row["POD1"]
+		if not (tu(PID) > tu(POD1)):
+			return (False, ("This version does not support bushing whith PID %s"
+					"smaller than POD1 %s.")%(PID, POD1))
+		else:
+			return(True, "")
+
 	def accept(self):
 		"""User clicked OK"""
 		# Update active document.  If there is none, show a warning message and do nothing.
@@ -373,12 +417,18 @@ class MainDialog(QtGui.QDialog):
 			createSolid = self.checkBoxCreateSolid.isChecked()
 			if partName is not None:
 				bushing = BushingFromTable(document, self.table)
-				bushing.create(partName, createSolid)
-				document.recompute()
-				# Save user input for the next dialog call.
-				self.saveInput()
-				# Call parent class.
-				super(MainDialog, self).accept()
+				(supported, message) = self.partDimensionsSupported(partName)
+				if supported:
+					bushing.create(partName, createSolid)
+					document.recompute()
+					# Save user input for the next dialog call.
+					self.saveInput()
+					# Call parent class.
+					super(MainDialog, self).accept()
+				else:
+					msgBox = QtGui.QMessageBox()
+					msgBox.setText(message)
+					msgBox.exec_()
 			else:
 				msgBox = QtGui.QMessageBox()
 				msgBox.setText("Select part")
