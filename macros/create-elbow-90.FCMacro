@@ -157,6 +157,9 @@ class Elbow:
 		sweep.Spine=(path_sketch,["Edge1", "Edge2", "Edge3"])
 		sweep.Solid=True
 		sweep.Frenet=False # Is it necessary?
+		# Hide the sketches.
+		Gui.getDocument(document.Name).getObject(base_sketch.Name).Visibility = False
+		Gui.getDocument(document.Name).getObject(path_sketch.Name).Visibility = False
 		# Add all the objects to the group.
 		group.addObject(base_sketch)
 		group.addObject(path_sketch,)
