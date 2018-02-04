@@ -23,7 +23,7 @@ def GetMacroPath():
 # This is the path to the dimensions table. 
 CSV_TABLE_PATH =  GetMacroPath()+"/bushing.csv"
 # It must contain unique values in the column "Name" and also, dimensions listened below.
-DIMENSIONS_USED = ["PID", "PID1", "POD1", "L", "N"]
+DIMENSIONS_USED = ["POD", "PID1", "POD1", "L", "N"]
 
 
 # The value RELATIVE_EPSILON is used to slightly change the size of a subtracted part
@@ -80,21 +80,21 @@ class UnplausibleDimensions(Error):
 class Bushing:
 	def __init__(self, document):
 		self.document = document
-		self.PID = tu("4 in")
+		self.POD = tu("4 in")
 		self.PID1 = tu("1 in")
 		self.POD1 = tu("2 in")
 		self.N = tu("2 in")
 		self.L = tu("3 in")
 		
 	def checkDimensions(self):
-		if not ( self.PID > tu("0 mm") and self.PID1 > tu("0 mm") ):
-			raise UnplausibleDimensions("Inner pipe dimensions must be positive. They are %s and %s instead"%(self.PID, self.PID1))
+		if not ( self.POD > tu("0 mm") and self.PID1 > tu("0 mm") ):
+			raise UnplausibleDimensions("Pipe dimensions must be positive. They are POD=%s and PID1=%s instead"%(self.POD, self.PID1))
 		if not ( self.POD1 > self.PID1):
 			raise UnplausibleDimensions("Outer diameter POD1 %s must be larger than inner diameter PID1 %s"%(self.POD1, self.PID1))
 		if not ( self.N > 0):
 			raise UnplausibleDimensions("Length N=%s must be positive"%self.X1)
-		if not ( self.PID > self.POD1):
-			raise UnplausibleDimensions("Inner diameter of the larger pipe PID %s must be larger than outer diameter of the smaller pipe POD1 %s."%(self.PID, self.POD1))
+		if not ( self.POD > self.POD1):
+			raise UnplausibleDimensions("Outer diameter of the larger pipe POD %s must be larger than outer diameter of the smaller pipe POD1 %s."%(self.POD, self.POD1))
 		if not ( self.L > self.N):
 			raise UnplausibleDimensions("The liength L %s must be larger than the length N %s"%(self.L, self.N))
 		
@@ -106,7 +106,7 @@ class Bushing:
 		X1 = (self.L-self.N)/2
 		# I also do not know what is the size of the thing.
 		# I take 1.2 of the inner diameter of the larger pipe
-		X2 = self.PID*1.1
+		X2 = self.POD*1.1
 		box1 = self.document.addObject("Part::Box","Box")
 		box1.Height = X1
 		box1.Length = X2
@@ -130,7 +130,7 @@ class Bushing:
 		return common
 	def createOuterPart(self):
 		outer_cylinder = self.document.addObject("Part::Cylinder","OuterCynlider")
-		outer_cylinder.Radius = self.PID/2
+		outer_cylinder.Radius = self.POD/2
 		outer_cylinder.Height = self.L
 		thing = self.createThing()
 		# Bind two parts.
@@ -153,7 +153,7 @@ class Bushing:
 		# Make a cone for a larger socket. There are no dimensions for this con. There fore 
 		# use simbolically a Radius such that the wall at the lower end is twice as ting
 		# as in the upper end of socket.
-		W2 = (self.PID-self.PID1)/2
+		W2 = (self.POD-self.PID1)/2
 		socket_cone = self.document.addObject("Part::Cone","Cone")
 		socket_cone.Radius2 = self.PID1/2
 		socket_cone.Radius1 = self.PID1/2 + W2/2
@@ -255,7 +255,7 @@ class BushingFromTable:
 		if row is None:
 			print("Part not found")
 			return
-		bushing.PID = tu(row["PID"])
+		bushing.POD = tu(row["POD"])
 		bushing.PID1 = tu(row["PID1"])
 		bushing.POD1 = tu(row["POD1"])
 		bushing.N = tu(row["N"])
@@ -372,7 +372,7 @@ class MainDialog(QtGui.QDialog):
 	def retranslateUi(self, Dialog):
 		Dialog.setWindowTitle(QtGui.QApplication.translate("Dialog", "Create bushing", None, QtGui.QApplication.UnicodeUTF8))
 		self.checkBoxCreateSolid.setText(QtGui.QApplication.translate("Dialog", "Create Solid", None, QtGui.QApplication.UnicodeUTF8))
-		self.label_2.setText(QtGui.QApplication.translate("Dialog", "<html><head/><body><p>To construct a part, only these dimensions are used: L, N, PID, PID1, and POD1. All other dimensions are used for inromation.</p></body></html>", None, QtGui.QApplication.UnicodeUTF8))
+		self.label_2.setText(QtGui.QApplication.translate("Dialog", "<html><head/><body><p>To construct a part, only these dimensions are used: L, N, POD, PID1, and POD1. All other dimensions are used for inromation.</p></body></html>", None, QtGui.QApplication.UnicodeUTF8))
 
 
 	def initTable(self):
@@ -395,17 +395,6 @@ class MainDialog(QtGui.QDialog):
 			if row_i >= 0:
 				self.tableViewParts.selectRow(row_i)
 
-	def partDimensionsSupported(self, partName):
-		row = self.table.findPart(partName)
-		"""Return true if the dimension of the bushing are supported and False otherwise.
-		Also return message as the second argument """
-		PID = row["PID"]
-		POD1 = row["POD1"]
-		if not (tu(PID) > tu(POD1)):
-			return (False, ("This version does not support bushing whith PID %s"
-					"smaller than POD1 %s.")%(PID, POD1))
-		else:
-			return(True, "")
 
 	def accept(self):
 		"""User clicked OK"""
@@ -417,18 +406,12 @@ class MainDialog(QtGui.QDialog):
 			createSolid = self.checkBoxCreateSolid.isChecked()
 			if partName is not None:
 				bushing = BushingFromTable(document, self.table)
-				(supported, message) = self.partDimensionsSupported(partName)
-				if supported:
-					bushing.create(partName, createSolid)
-					document.recompute()
-					# Save user input for the next dialog call.
-					self.saveInput()
-					# Call parent class.
-					super(MainDialog, self).accept()
-				else:
-					msgBox = QtGui.QMessageBox()
-					msgBox.setText(message)
-					msgBox.exec_()
+				bushing.create(partName, createSolid)
+				document.recompute()
+				# Save user input for the next dialog call.
+				self.saveInput()
+				# Call parent class.
+				super(MainDialog, self).accept()
 			else:
 				msgBox = QtGui.QMessageBox()
 				msgBox.setText("Select part")
@@ -493,7 +476,7 @@ def TestTable():
 		print("Creating part %s"%partName)
 		bushing.create(partName, True)
 		document.recompute()
-		break
+		
 
 #TestBushing()
 #TestTable()
