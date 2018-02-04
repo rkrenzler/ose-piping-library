@@ -21,8 +21,14 @@ tu = FreeCAD.Units.parseQuantity
 
 def GetMacroPath():
 	param = FreeCAD.ParamGet("User parameter:BaseApp/Preferences/Macro")
-	return param.GetString("MacroPath","")+"/"
-	
+	return param.GetString("MacroPath","")
+
+# This is the path to the dimensions table. 
+CSV_TABLE_PATH =  GetMacroPath()+"/alpha-deg-elbow.csv"
+# It must contain unique values in the column "Name" and also, dimensions listened below.
+DIMENSIONS_USED = ["alpha", "POD", "PID", "H", "J", "M"]
+
+
 # The value RELATIVE_EPSILON is used to slightly change the size of a subtracted part
 # to prevent problems with boolean operations.
 # This value does not change the appearance of part and can be large.
@@ -30,56 +36,6 @@ def GetMacroPath():
 # The relative deviation is then (L*(1+RELATIVE_EPSILON)-L)/L = RELATIVE_EPSILON.
 # That is why the constant has "relative" in its name.
 RELATIVE_EPSILON = 0.1
-
-class CsvTable:
-	""" Read elbow dimensions from a csv file"""
-	def __init__(self):
-		self.headers = []
-		self.data = []
-		self.hasValidData = False
-
-	def load(self, filename):
-		"""Load data from a CSV file."""
-		self.hasValidData = False
-		with open(filename, "r") as csvfile:
-			csv_reader = csv.reader(csvfile, delimiter=',', quotechar='"')
-			self.headers = csv_reader.next()
-			# Fill the talble
-			self.data = []
-			names = []
-			ni = self.headers.index("Name")
-			for row in csv_reader:
-				# Check if the name is unique
-				name = row[ni]
-				if name in names:
-					print('Error: Not unique name "%s" found in %s'%(name, filename))
-					exit(1)
-				else:
-					names.append(name)
-				self.data.append(row)
-			csvfile.close() # Should I close this file explicitely?
-			self.hasValidData = self.hasNecessaryColumns()
-
-	def hasNecessaryColumns(self):
-		""" Check if the data contains all calumns required to create an elbow."""
-		return all(h in self.headers for h in ["Name", "alpha", "POD", "PID", "H", "J", "M"])
-
-	def findPart(self, name):
-		"""Return first first raw with the particular part name as a dictionary."""
-		# First find out the index of the column "Name".
-		ci = self.headers.index("Name")
-		# Search for the first appereance of the name in this column.
-		for row in self.data:
-			if row[ci] == name:
-				# Convert row to dicionary.
-				return dict(zip(self.headers, row))
-		return None
-
-	def getPartName(self, index):
-		"""Return part name of a row with the index *index*."""
-		ci = self.headers.index("Name")
-		return self.data[index][ci]
-
 
 class Error(Exception):
     """Base class for exceptions in this module."""
@@ -101,7 +57,7 @@ class UnplausibleDimensions(Error):
 class Elbow:
 	def __init__(self, document):
 		self.document = document
-		# Set default values.
+		# Init class with test values
 		self.alpha = tu("60 deg")
 		self.outerD = tu("3 in")
 		self.socketD = tu("2 in")
@@ -145,7 +101,7 @@ class Elbow:
 			raise UnplausibleDimensions("Length len1=%s must be positive"%self.len1)
 		if not ( self.len2 > 0):
 			raise UnplausibleDimensions("Length len2=%s must be positive"%self.len2)
-			
+	
 	@staticmethod
 	def CreateLineSegment(point_1, point_2):
 		""" Create a line segment.
@@ -204,6 +160,9 @@ class Elbow:
 		sweep.Spine=(path_sketch,["Edge1", "Edge2", "Edge3"])
 		sweep.Solid=True
 		sweep.Frenet=False # Is it necessary?
+		# Hide the sketches.
+		Gui.getDocument(document.Name).getObject(base_sketch.Name).Visibility = False
+		Gui.getDocument(document.Name).getObject(path_sketch.Name).Visibility = False
 		# Add all the objects to the group.
 		group.addObject(base_sketch)
 		group.addObject(path_sketch,)
@@ -317,6 +276,63 @@ class ElbowAlphaFromTable:
 		return part
 
 
+
+class CsvTable:
+	""" Read coupling dimensions from a csv file.
+	one part of the column must be unique and contains a unique key.
+	It is the column "Name".
+	"""
+	def __init__(self, mandatoryDims=[]):
+		"""
+		@param mandatoryDims: list of column names which must be presented in the CSV files apart
+		the "Name" column
+		"""
+		self.headers = []
+		self.data = []
+		self.hasValidData = False
+		self.mandatoryDims=mandatoryDims
+	def load(self, filename):
+		"""Load data from a CSV file."""
+		self.hasValidData = False
+		with open(filename, "r") as csvfile:
+			csv_reader = csv.reader(csvfile, delimiter=',', quotechar='"')
+			self.headers = csv_reader.next()
+			# Fill the talble
+			self.data = []
+			names = []
+			ni = self.headers.index("Name")
+			for row in csv_reader:
+				# Check if the name is unique
+				name = row[ni]
+				if name in names:
+					print('Error: Not unique name "%s" found in %s'%(name, filename))
+					exit(1)
+				else:
+					names.append(name)
+				self.data.append(row)
+			csvfile.close() # Should I close this file explicitely?
+			self.hasValidData = self.hasNecessaryColumns()
+
+	def hasNecessaryColumns(self):
+		""" Check if the data contains all calumns required to create a coupling."""
+		return all(h in self.headers for h in (self.mandatoryDims + ["Name"]))
+
+	def findPart(self, name):
+		"""Return first first raw with the particular part name as a dictionary."""
+		# First find out the index of the column "Name".
+		ci = self.headers.index("Name")
+		# Search for the first appereance of the name in this column.
+		for row in self.data:
+			if row[ci] == name:
+				# Convert row to dicionary.
+				return dict(zip(self.headers, row))
+		return None
+
+	def getPartName(self, index):
+		"""Return part name of a row with the index *index*."""
+		ci = self.headers.index("Name")
+		return self.data[index][ci]
+
 class PartTableModel(QtCore.QAbstractTableModel): 
 	def __init__(self, headers, data, parent=None, *args):
 		self.headers = headers
@@ -356,11 +372,11 @@ class PartTableModel(QtCore.QAbstractTableModel):
 			return self.headers[col]
 		return None
 
-class GuiElbowAlpha(QtGui.QDialog):
+class MainDialog(QtGui.QDialog):
 	QSETTINGS_APPLICATION = "OSE piping freecad macros"
 	QSETTINGS_NAME = "elbow alpha user input"
 	def __init__(self, table):
-		super(GuiElbowAlpha, self).__init__()
+		super(MainDialog, self).__init__()
 		self.table = table
 		self.initUi()
 	def initUi(self): 
@@ -400,7 +416,7 @@ class GuiElbowAlpha(QtGui.QDialog):
 		self.verticalLayout.addWidget(self.tableViewParts)
 		self.label = QtGui.QLabel(Dialog)
 		self.label.setText("")
-		self.label.setPixmap(QtGui.QPixmap(GetMacroPath()+"alpha-deg-elbow-dimensions.png"))
+		self.label.setPixmap(QtGui.QPixmap(GetMacroPath()+"/alpha-deg-elbow-dimensions.png"))
 		self.label.setAlignment(QtCore.Qt.AlignCenter)
 		self.label.setObjectName("label")
 		self.verticalLayout.addWidget(self.label)
@@ -418,6 +434,7 @@ class GuiElbowAlpha(QtGui.QDialog):
 	def retranslateUi(self, Dialog):
 		Dialog.setWindowTitle(QtGui.QApplication.translate("Dialog", "Create alpha° elbow", None, QtGui.QApplication.UnicodeUTF8))
 		self.checkBoxCreateSolid.setText(QtGui.QApplication.translate("Dialog", "Create Solid", None, QtGui.QApplication.UnicodeUTF8))
+
 	def initTable(self):
 		# Read table data from CSV
 		self.model = PartTableModel(self.table.headers, self.table.data)
@@ -453,7 +470,7 @@ class GuiElbowAlpha(QtGui.QDialog):
 				# Save user input for the next dialog call.
 				self.saveInput()
 				# Call parent class.
-				super(GuiElbowAlpha, self).accept()
+				super(MainDialog, self).accept()
 			else:
 				msgBox = QtGui.QMessageBox()
 				msgBox.setText("Select part")
@@ -466,38 +483,37 @@ class GuiElbowAlpha(QtGui.QDialog):
 			msgBox.exec_()
 	def saveInput(self):
 		"""Store user input for the next run."""
-		settings = QtCore.QSettings(GuiElbowAlpha.QSETTINGS_APPLICATION, GuiElbowAlpha.QSETTINGS_NAME)
+		settings = QtCore.QSettings(MainDialog.QSETTINGS_APPLICATION, MainDialog.QSETTINGS_NAME)
 		check = self.checkBoxCreateSolid.checkState()
 		settings.setValue("checkBoxCreateSolid", int(check))
 		settings.setValue("LastSelectedPartName", self.getSelectedPartName())
 		settings.sync()
 	def restoreInput(self):
-		settings = QtCore.QSettings(GuiElbowAlpha.QSETTINGS_APPLICATION, GuiElbowAlpha.QSETTINGS_NAME)
+		settings = QtCore.QSettings(MainDialog.QSETTINGS_APPLICATION, MainDialog.QSETTINGS_NAME)
 		checkState = QtCore.Qt.CheckState(int(settings.value("checkBoxCreateSolid")))
 		self.checkBoxCreateSolid.setCheckState(checkState)
 		self.selectPartByName(settings.value("LastSelectedPartName"))
 
 
-# Before working with macros, try to load the dimension table.
-CSV_TABLE_PATH = GetMacroPath()+"alpha-deg-elbow.csv"
+def GuiCheckTable():
+	# Check if the CSV file exists.
+	if os.path.isfile(CSV_TABLE_PATH) == False:
+		text = "This macro requires %s  but this file does not exist."%(CSV_TABLE_PATH)
+		msgBox = QtGui.QMessageBox(QtGui.QMessageBox.Warning, "Creating of the elbow failed.", text)
+		msgBox.exec_()
+		exit(1) # Error
 
-# Check if the CSV file exists
-if os.path.isfile(CSV_TABLE_PATH) == False:
-	text = "This macro requires %s  but this file does not exist."%(CSV_TABLE_PATH)
-	msgBox = QtGui.QMessageBox(QtGui.QMessageBox.Warning, "Creating of the elbow failed.", text)
-	msgBox.exec_()
-	exit(1) # Error
+	print("Trying to load CSV file with dimensions: %s"%CSV_TABLE_PATH) 
+	table = CsvTable(DIMENSIONS_USED)
+	table.load(CSV_TABLE_PATH)
 
-print("Trying to load CSV file with dimensions: %s"%CSV_TABLE_PATH) 
-table = CsvTable()
-table.load(CSV_TABLE_PATH)
-
-if table.hasValidData == False:
-	text = 'Invalid %s.\n'\
-		'It must contain columns "Name", "alpha", "POD", "PID", "H", "K", and "M".'%(CSV_TABLE_PATH)
-	msgBox = QtGui.QMessageBox(QtGui.QMessageBox.Warning, "Creating of the elbow failed.", text)
-	msgBox.exec_()
-	exit(1) # Error
+	if table.hasValidData == False:
+		text = 'Invalid %s.\n'\
+			'It must contain columns %s.'%(CSV_TABLE_PATH, ", ".join(DIMENSIONS_USED))
+		msgBox = QtGui.QMessageBox(QtGui.QMessageBox.Warning, "Creating of the elbow failed.", text)
+		msgBox.exec_()
+		exit(1) # Error
+	return table
 
 # Test macro.
 def TestAlphaTable():
@@ -511,6 +527,5 @@ def TestAlphaTable():
 		document.recompute()
 		
 
-#TestAlphaTable()
-
-form = GuiElbowAlpha(table)
+table = GuiCheckTable()
+form = MainDialog(table)
