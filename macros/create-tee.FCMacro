@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 # Author: Ruslan Krenzler.
-# Date: 21 Januar 2018
+# Date: 06 February 2018
 # Create a tee-fitting.
 # Version 0.3
 
@@ -19,10 +19,13 @@ tu = FreeCAD.Units.parseQuantity
 
 def GetMacroPath():
 	param = FreeCAD.ParamGet("User parameter:BaseApp/Preferences/Macro")
-	return param.GetString("MacroPath","")+"/"
+	return param.GetString("MacroPath","")
 
 # This is the path to the dimensions table
-CSV_TABLE_PATH =  GetMacroPath()+"tee.csv"
+CSV_TABLE_PATH =  GetMacroPath()+"/tee.csv"
+
+
+DIMENSIONS_USED = ["G", "G1", "G2", "H", "H1", "H2", "PID", "PID1", "POD", "POD1", "M", "M1"]
 
 
 # The value RELATIVE_EPSILON is used to slightly change the size of a subtracted part
@@ -35,13 +38,60 @@ CSV_TABLE_PATH =  GetMacroPath()+"tee.csv"
 # Maybe there is no more problems with boolean operations.
 RELATIVE_EPSILON = 0.1
 
+def nestedObjects(group):
+	res = []
+	if group.OutList == []:
+		res.append(group)
+	else:
+		# Append children first.
+		for o in group.OutList:
+			res += nestedObjects(o)
+		res.append(group)
+	return res
+
+def toSolid(document, part, name):
+	"""Convert object to a solid.
+		Basically those are commands, which FreeCAD runs when user converts a part to a solid.
+	"""
+	s = part.Shape.Faces
+	s = Part.Solid(Part.Shell(s))
+	o = document.addObject("Part::Feature", name)
+	o.Label=name
+	o.Shape=s
+	return o
+
+
+class Error(Exception):
+	"""Base class for exceptions in this module."""
+	def __init__(self, message):
+		super(Error, self).__init__(message)
+
+
+class UnplausibleDimensions(Error):
+	"""Exception raised when dimensions are unplausible. For example if
+	outer diameter is larger than the iner one.
+
+	Attributes:
+	message -- explanation of the error
+	"""
+
+	def __init__(self, message):
+		super(UnplausibleDimensions, self).__init__(message)
+
 class CsvTable:
-	""" Read coupling dimensions from a csv file"""
-	def __init__(self):
+	""" Read coupling dimensions from a csv file.
+	one part of the column must be unique and contains a unique key.
+	It is the column "Name".
+	"""
+	def __init__(self, mandatoryDims=[]):
+		"""
+		@param mandatoryDims: list of column names which must be presented in the CSV files apart
+		the "Name" column
+		"""
 		self.headers = []
 		self.data = []
 		self.hasValidData = False
-
+		self.mandatoryDims=mandatoryDims
 	def load(self, filename):
 		"""Load data from a CSV file."""
 		self.hasValidData = False
@@ -65,8 +115,8 @@ class CsvTable:
 			self.hasValidData = self.hasNecessaryColumns()
 
 	def hasNecessaryColumns(self):
-		""" Check if the data contains all calumns required to create a coupling."""
-		return all(h in self.headers for h in ["Name", "POD", "PID", "POD1", "PID1", "G", "G1", "G2", "H", "H1", "H2", "M", "M1"])
+		""" Check if the data contains all the columns required to create a tee."""
+		return all(h in self.headers for h in (self.mandatoryDims + ["Name"]))
 
 	def findPart(self, name):
 		"""Return first first raw with the particular part name as a dictionary."""
@@ -124,7 +174,24 @@ class Tee:
 			res.append(group)
 		return res
 
+	def checkDimensions(self):
+		if not ( self.PID > tu("0 mm") and self.PID1 > tu("0 mm") ):
+			raise UnplausibleDimensions("Inner pipe dimensions must be positive. They are %s and %s instead"%(self.PID, self.PID1))
+		if not ( self.M > self.POD and self.POD > self.PID ):
+			raise UnplausibleDimensions("It must hold outer diameter %s > Outer pipe diameter %s > Inner pipe diameter %s"%(self.M, self.POD, self.PID))
+		if not ( self.M1 > self.POD1 and self.POD1 > self.PID1 ):
+			raise UnplausibleDimensions("It must hold outer diameter %s > Outer pipe diameter %s > Inner pipe diameter %s"%(self.M1, self.POD1, self.PID1))
+		if not ( self.G > tu("0 mm") and self.G1 > tu("0 mm") and self.G2 > tu("0 mm")):
+			raise UnplausibleDimensions("Lengths G=%s, G1=%s, G=%s, must be positive"%(self.G, self.G1, self.G2))
+		if not ( self.H > self.G):
+			raise UnplausibleDimensions("H=%s must be larger than G=%s."%(self.H, self.G))
+		if not ( self.H1 > self.G1):
+			raise UnplausibleDimensions("H=%s must be larger than G=%s."%(self.H1, self.G1))
+		if not ( self.H2 > self.G2):
+			raise UnplausibleDimensions("H=%s must be larger than G=%s."%(self.H2, self.G2))
+
 	def create(self, convertToSolid):
+		self.checkDimensions()
 		L = self.H+self.H2
 		vertical_outer_cylinder = self.document.addObject("Part::Cylinder","VerticalOuterCynlider")
 		vertical_outer_cylinder.Radius = self.M1/2
@@ -321,7 +388,7 @@ class MainDialog(QtGui.QDialog):
 		self.verticalLayout.addWidget(self.label_2)
 		self.label = QtGui.QLabel(Dialog)
 		self.label.setText("")
-		self.label.setPixmap(QtGui.QPixmap(GetMacroPath()+"tee-dimensions.png"))
+		self.label.setPixmap(QtGui.QPixmap(GetMacroPath()+"/tee-dimensions.png"))
 		self.label.setAlignment(QtCore.Qt.AlignCenter)
 		self.label.setObjectName("label")
 		self.verticalLayout.addWidget(self.label)
@@ -390,6 +457,7 @@ class MainDialog(QtGui.QDialog):
 				"then try to create the tee fitting again."
 			msgBox = QtGui.QMessageBox(QtGui.QMessageBox.Warning, "Creating of the tee fitting failed.", text)
 			msgBox.exec_()
+
 	def saveInput(self):
 		"""Store user input for the next run."""
 		settings = QtCore.QSettings(MainDialog.QSETTINGS_APPLICATION, MainDialog.QSETTINGS_NAME)
@@ -397,6 +465,7 @@ class MainDialog(QtGui.QDialog):
 		settings.setValue("checkBoxCreateSolid", int(check))
 		settings.setValue("LastSelectedPartName", self.getSelectedPartName())
 		settings.sync()
+
 	def restoreInput(self):
 		settings = QtCore.QSettings(MainDialog.QSETTINGS_APPLICATION, MainDialog.QSETTINGS_NAME)
 		checkState = QtCore.Qt.CheckState(int(settings.value("checkBoxCreateSolid")))
@@ -406,24 +475,26 @@ class MainDialog(QtGui.QDialog):
 
 # Before working with macros, try to load the dimension table.
 
-# Check if the CSV file exists.
-if os.path.isfile(CSV_TABLE_PATH) == False:
-	text = "This macro requires %s  but this file does not exist."%(CSV_TABLE_PATH)
-	msgBox = QtGui.QMessageBox(QtGui.QMessageBox.Warning, "Creating of the tee failed.", text)
-	msgBox.exec_()
-	exit(1) # Error
+def GuiCheckTable():
+	# Check if the CSV file exists.
+	if os.path.isfile(CSV_TABLE_PATH) == False:
+		text = "This macro requires %s  but this file does not exist."%(CSV_TABLE_PATH)
+		msgBox = QtGui.QMessageBox(QtGui.QMessageBox.Warning, "Creating of the tee failed.", text)
+		msgBox.exec_()
+		exit(1) # Error
 
-print("Trying to load CSV file with dimensions: %s"%CSV_TABLE_PATH) 
-table = CsvTable()
-table.load(CSV_TABLE_PATH)
+	print("Trying to load CSV file with dimensions: %s"%CSV_TABLE_PATH) 
+	table = CsvTable(DIMENSIONS_USED)
+	table.load(CSV_TABLE_PATH)
 
-if table.hasValidData == False:
-	text = 'Invalid %s.\n'\
-		'It must contain columns "Name", "POD", "PID", "POD1", "PID1", "G", "G1", "G2", "H", "H1", "H2", "M" and "M1".'%(CSV_TABLE_PATH)
-	msgBox = QtGui.QMessageBox(QtGui.QMessageBox.Warning, "Creating of the tee failed.", text)
-	msgBox.exec_()
-	exit(1) # Error
-	
+	if table.hasValidData == False:
+		text = 'Invalid %s.\n'\
+			'It must contain columns %s.'%(CSV_TABLE_PATH, ", ".join(DIMENSIONS_USED))
+		msgBox = QtGui.QMessageBox(QtGui.QMessageBox.Warning, "Creating of the tee failed.", text)
+		msgBox.exec_()
+		exit(1) # Error
+	return table
+
 # Test macros.
 def TestTee():
 	document = App.activeDocument()
@@ -433,16 +504,20 @@ def TestTee():
 
 def TestTable():
 	document = App.activeDocument()
+	table = CsvTable(DIMENSIONS_USED)
+	table.load(CSV_TABLE_PATH)
 	tee = TeeFromTable(document, table)
 	for i in range(0, len(table.data)):
 		print("Selecting row %d"%i)
 		partName = table.getPartName(i)
 		print("Creating part %s"%partName)
-		part = tee.create(partName, True)
+		part = tee.create(partName, False)
 		document.recompute()
-	document.recompute()
+		document.recompute()
+
 # Create tee fitting.
 #TestTable()
+table = GuiCheckTable() # Open a CSV file, check its content, and return it as a CsvTable object.
 form = MainDialog(table)
 
 
