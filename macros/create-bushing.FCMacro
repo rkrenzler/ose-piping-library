@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 # Author: Ruslan Krenzler.
-# Date: 27 Januar 2018
+# Date: 27 January 2018
 # Create a bushing-fitting.
 # Version 0.3
 
@@ -92,7 +92,7 @@ class Bushing:
 		if not ( self.POD1 > self.PID1):
 			raise UnplausibleDimensions("Outer diameter POD1 %s must be larger than inner diameter PID1 %s"%(self.POD1, self.PID1))
 		if not ( self.N > 0):
-			raise UnplausibleDimensions("Length N=%s must be positive"%self.X1)
+			raise UnplausibleDimensions("Length N=%s must be positive"%self.N)
 		if not ( self.POD > self.POD1):
 			raise UnplausibleDimensions("Outer diameter of the larger pipe POD %s must be larger than outer diameter of the smaller pipe POD1 %s."%(self.POD, self.POD1))
 		if not ( self.L > self.N):
@@ -404,7 +404,7 @@ class MainDialog(QtGui.QDialog):
 		QtCore.QMetaObject.connectSlotsByName(Dialog)
 
 	def retranslateUi(self, Dialog):
-		Dialog.setWindowTitle(QtGui.QApplication.translate("Dialog", "Create bushing", None, QtGui.QApplication.UnicodeUTF8))
+		Dialog.setWindowTitle(QtGui.QApplication.translate("Dialog", "Create Bushing", None, QtGui.QApplication.UnicodeUTF8))
 		self.checkBoxCreateSolid.setText(QtGui.QApplication.translate("Dialog", "Create Solid", None, QtGui.QApplication.UnicodeUTF8))
 		self.label_2.setText(QtGui.QApplication.translate("Dialog", "<html><head/><body><p>To construct a part, only these dimensions are used: L, N, POD, PID1, and POD1. All other dimensions are used for inromation.</p></body></html>", None, QtGui.QApplication.UnicodeUTF8))
 
@@ -471,6 +471,8 @@ class MainDialog(QtGui.QDialog):
 		self.checkBoxCreateSolid.setCheckState(checkState)
 		self.selectPartByName(settings.value("LastSelectedPartName"))
 
+
+# Before working with macros, try to load the dimension table.
 
 def GuiCheckTable():
 	# Check if the CSV file exists.
