@@ -82,9 +82,6 @@ class OuterCorner:
 		if not (self.M > self.POD and self.POD > self.PID):
 			raise UnplausibleDimensions("Outer diameter M %s must be larger than outer pipe POD %s diamter. ",
 						"Outer pipe diameter POD %s must be larger than inner pipe diameter PID %s"%(self.M, self.POD, self.PID))
-		if not (self.G > self.M/2):
-			raise UnplausibleDimensions("Length G %s must be larger than M/2 %s."%(self.G, self.M/2))
-
 		if not (self.H > self.G):
 			raise UnplausibleDimensions("Length G %s must be larger than H %s."%(self.G, self.H))
 
@@ -140,7 +137,7 @@ class OuterCorner:
 		corner = self.document.addObject("Part::Cut","Cut")
 		corner.Base = outer
 		corner.Tool = inner
-
+		
 		if convertToSolid:
 			# Before making a solid, recompute documents. Otherwise there will be
 			#    s = Part.Solid(Part.Shell(s))
