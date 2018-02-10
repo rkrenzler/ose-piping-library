@@ -82,6 +82,9 @@ class OuterCorner:
 		if not (self.M > self.POD and self.POD > self.PID):
 			raise UnplausibleDimensions("Outer diameter M %s must be larger than outer pipe POD %s diamter. ",
 						"Outer pipe diameter POD %s must be larger than inner pipe diameter PID %s"%(self.M, self.POD, self.PID))
+		if not (self.G > self.PID/2):
+			raise UnplausibleDimensions("Length G %s must be larger than inner pipe radius PID/2=%s."%(self.G, self.PID/2))
+
 		if not (self.H > self.G):
 			raise UnplausibleDimensions("Length G %s must be larger than H %s."%(self.G, self.H))
 
@@ -453,8 +456,8 @@ def TestTable():
 		
 
 #TestCorner()
-#TestTable()
-table = GuiCheckTable() # Open a CSV file, check its content, and return it as a CsvTable object.
-form = MainDialog(table)
+TestTable()
+#table = GuiCheckTable() # Open a CSV file, check its content, and return it as a CsvTable object.
+#form = MainDialog(table)
 
 
