@@ -456,8 +456,8 @@ def TestTable():
 		
 
 #TestCorner()
-TestTable()
-#table = GuiCheckTable() # Open a CSV file, check its content, and return it as a CsvTable object.
-#form = MainDialog(table)
+#TestTable()
+table = GuiCheckTable() # Open a CSV file, check its content, and return it as a CsvTable object.
+form = MainDialog(table)
 
 
