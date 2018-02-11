@@ -23,6 +23,14 @@ def GetMacroPath():
 # This version of the macro does not create corners.
 DIMENSIONS_USED = ["G", "LX", "LY", "LZ", "POD", "PID"] 
 
+# It must contain unique values in the column "Name" and also, dimensions listened below.
+PIPE_DIMENSIONS_USED = ["ID", "OD"]
+CORNER_DIMENSIONS_USED = ["G", "H", "M", "POD", "PID"]
+
+PIPE_CSV_TABLE_PATH =  GetMacroPath()+"/pipe.csv"
+CORNER_CSV_TABLE_PATH =  GetMacroPath()+"/outer-corner.csv"
+
+
 # The value RELATIVE_EPSILON is used to slightly change the size of a subtracted part
 # to prevent problems with boolean operations.
 # This value does not change the appearance of part and can be large.
@@ -323,6 +331,123 @@ class Box:
 		self.createPipes(convertToSolid)
 		self.addCorners(convertToSolid)
 
+class CsvTable:
+	""" Read coupling dimensions from a csv file.
+	one part of the column must be unique and contains a unique key.
+	It is the column "Name".
+	"""
+	def __init__(self, mandatoryDims=[]):
+		"""
+		@param mandatoryDims: list of column names which must be presented in the CSV files apart
+		the "Name" column
+		"""
+		self.headers = []
+		self.data = []
+		self.hasValidData = False
+		self.mandatoryDims=mandatoryDims
+	def load(self, filename):
+		"""Load data from a CSV file."""
+		self.hasValidData = False
+		with open(filename, "r") as csvfile:
+			csv_reader = csv.reader(csvfile, delimiter=',', quotechar='"')
+			self.headers = csv_reader.next()
+			# Fill the talble
+			self.data = []
+			names = []
+			ni = self.headers.index("Name")
+			for row in csv_reader:
+				# Check if the name is unique
+				name = row[ni]
+				if name in names:
+					print('Error: Not unique name "%s" found in %s'%(name, filename))
+					exit(1)
+				else:
+					names.append(name)
+				self.data.append(row)
+			csvfile.close() # Should I close this file explicitely?
+			self.hasValidData = self.hasNecessaryColumns()
+
+	def hasNecessaryColumns(self):
+		""" Check if the data contains all calumns required to create a coupling."""
+		return all(h in self.headers for h in (self.mandatoryDims + ["Name"]))
+
+	def findPart(self, name):
+		"""Return first first raw with the particular part name as a dictionary."""
+		# First find out the index of the column "Name".
+		ci = self.headers.index("Name")
+		# Search for the first appereance of the name in this column.
+		for row in self.data:
+			if row[ci] == name:
+				# Convert row to dicionary.
+				return dict(zip(self.headers, row))
+		return None
+
+	def getPartName(self, index):
+		"""Return part name of a row with the index *index*."""
+		ci = self.headers.index("Name")
+		return self.data[index][ci]
+
+class PipeFromTable:
+	"""Create a part with dimensions from a CSV table."""
+	def __init__ (self, document, table):
+		self.document = document
+		self.table = table
+	def create(self, partName, length, convertToSolid = True):
+		pipe = Pipe(self.document)
+		row = self.table.findPart(partName)
+		if row is None:
+			print("Part not found")
+			return
+		pipe.ID = tu(row["ID"])
+		pipe.OD = tu(row["OD"])
+		pipe.L = length
+
+		part = pipe.create(convertToSolid)
+		part.Label = partName
+		return part
+
+
+class BoxFromTable:
+	"""Create a part with dimensions from a CSV table."""
+	def __init__ (self, document, pipe_table, corner_table):
+		self.document = document
+		self.pipe_table = pipe_table
+		self.corner_table = corner_table
+		self.LX = tu("12 in")
+		self.LY = tu("10 in")
+		self.LZ = tu("8 in")
+
+	def getCorner(self, partName):
+		corner = OuterCorner(self.document)
+		row = self.corner_table.findPart(partName)
+		if row is None:
+			print('Corner part "%s" not found'%partName)
+			return
+		corner.G = tu(row["G"])
+		corner.H = tu(row["H"])
+		corner.M = tu(row["M"])
+		corner.POD = tu(row["POD"])
+		corner.PID = tu(row["PID"])
+		return corner
+		
+	def create(self, pipeName, cornerName, convertToSolid = True):
+		frame_box = Box(self.document)
+		frame_box.LX = self.LX
+		frame_box.LY = self.LY
+		frame_box.LZ = self.LZ
+		# Init corner datata
+		frame_box.corner = self.getCorner(cornerName)
+		frame_box.G = frame_box.corner.G
+
+		"setup pipe dimensions"
+		row = self.pipe_table.findPart(pipeName)
+		if row is None:
+			print('Pipe part "%s" not found'%pipeName)
+			return
+		frame_box.PID = tu(row["ID"])
+		frame_box.POD = tu(row["OD"])
+		return frame_box.create(convertToSolid)
+
 # Test macros.
 def TestBox():
 	document = App.activeDocument()
@@ -330,7 +455,22 @@ def TestBox():
 	box.create(True)
 	document.recompute()
 
-TestBox()
+def TestTable():
+	document = App.activeDocument()
+	pipe_table = CsvTable(PIPE_DIMENSIONS_USED)
+	corner_table = CsvTable(CORNER_DIMENSIONS_USED)
+	pipe_table.load(PIPE_CSV_TABLE_PATH)
+	corner_table.load(CORNER_CSV_TABLE_PATH)
+	box = BoxFromTable(document, pipe_table, corner_table)
+	pipeName = pipe_table.getPartName(0)
+	cornerName = corner_table.getPartName(0)
+	print("Using pipe %s"%pipeName)
+	print("Using corner %s"%cornerName)
+	box.create(pipeName, cornerName, False)
+	document.recompute()
+
+#TestBox()
+TestTable()
 
 
 
