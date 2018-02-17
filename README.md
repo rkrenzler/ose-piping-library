@@ -13,29 +13,58 @@ Linux:
 1. Open or create a FreeCAD document.
 2. Select **Macro**->**Macros Menu**.
 3. Select **create-pipe.FCMacro**, **create-elbow-90.FCMacro** or **create-tee.FCMacro** and click **Execute**.
-   
+
 ## Example ##
-### 90°-elbow ### 
+### 90°-elbow ###
 ![90°-elbow dialog](doc/pvc-elbow-90-gui-screenshot.png)
 
 creates
-![90°-elbow CAD screenshot](doc/pvc-elbow-90-cad-screenshot.png).
 
-### alpha°-Elbow ### 
+![90°-elbow CAD screenshot](doc/pvc-elbow-90-cad-screenshot.png)
+
+### alpha°-Elbow ###
 Create an arbitrary elbow with the angle alpha within the range of 0°-180°.
+
 ![alpha°-elbow dialog](doc/pvc-elbow-alpha-gui-screenshot.png)
+
 creates
-![alpha°-elbow CAD](doc/pvc-elbow-alpha-cad-screenshot.png).
+
+![alpha°-elbow CAD](doc/pvc-elbow-alpha-cad-screenshot.png)
 
 
-### Coupling ### 
+### Coupling ###
 Create a centric coupling between two equal or different pipe sizes.
-![create coupling dialog](doc/pvc-coupling-gui-screenshot.png)
-creates
-![coupling CAD](doc/pvc-coupling-cad-screenshot.png).
 
-### Tee ### 
-Create an arbitrary elbow with the angle alpha within the range of 0°-180°.
-![create-tee dialog](doc/pvc-tee-gui-screenshot.png)
+![create coupling dialog](doc/pvc-coupling-gui-screenshot.png)
+
 creates
-![tee CAD](doc/pvc-tee-cad-screenshot.png).
+
+![coupling CAD](doc/pvc-coupling-cad-screenshot.png)
+
+
+### Bushing ###
+Create a bushing between two different pipe sizes. Not copling and bushings are different.
+
+![create bushing dialog](doc/pvc-bushing-gui-screenshot.png)
+
+creates
+
+![bushing CAD](doc/pvc-bushing-cad-screenshot.png).
+
+### Tee ###
+Create an arbitrary elbow with the angle alpha within the range of 0°-180°.
+
+![create-tee dialog](doc/pvc-tee-gui-screenshot.png)
+
+creates
+
+![tee CAD](doc/pvc-tee-cad-screenshot.png)
+
+### Cross ###
+Create a cross between equal or different pipes.
+
+![create-cross dialog](doc/pvc-cross-gui-screenshot.png)
+
+creates
+
+![cross CAD](doc/pvc-cross-cad-screenshot.png)
