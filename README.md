@@ -1,6 +1,8 @@
 # OSE Piping library #
 This project contains FreeCAD macros to create various pipe, tee, and elbow fittings.
 It is made for [Open Source Ecology](http://opensourceecology.org). The project is a very early experemental state.
+# Project is discontinued
+This project is discontinued. The macros are moved to OSE-piping-workbench.
 
 ## Installation ##
 Linux:
